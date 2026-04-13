@@ -1,84 +1,194 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/')({ component: App })
+export const Route = createFileRoute('/')({ component: Home })
 
-function App() {
+/**
+ * Static reference for UI integration: documents the `koko` binary shape (see `koko -h`).
+ * Not wired to process execution yet.
+ */
+function Home() {
   return (
-    <main className="page-wrap px-4 pb-8 pt-14">
-      <section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-10 sm:px-10 sm:py-14">
-        <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(79,184,178,0.32),transparent_66%)]" />
-        <div className="pointer-events-none absolute -bottom-20 -right-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(47,106,74,0.18),transparent_66%)]" />
-        <p className="island-kicker mb-3">TanStack Start Base Template</p>
-        <h1 className="display-title mb-5 max-w-3xl text-4xl leading-[1.02] font-bold tracking-tight text-[var(--sea-ink)] sm:text-6xl">
-          Start simple, ship quickly.
+    <main className="page-wrap px-4 py-12">
+      <section className="island-shell mb-6 rounded-2xl p-6 sm:p-8">
+        <p className="island-kicker mb-2">CLI reference</p>
+        <h1 className="display-title mb-3 text-4xl font-bold text-[var(--sea-ink)] sm:text-5xl">
+          <code className="text-[var(--sea-ink)]">koko</code> command map
         </h1>
-        <p className="mb-8 max-w-2xl text-base text-[var(--sea-ink-soft)] sm:text-lg">
-          This base starter intentionally keeps things light: two routes, clean
-          structure, and the essentials you need to build from scratch.
+        <p className="m-0 max-w-3xl text-base leading-8 text-[var(--sea-ink-soft)]">
+          Global binary name: <code>koko</code>. Top level is always{' '}
+          <code>koko [global options] &lt;COMMAND&gt;</code>. Global flags apply before the
+          subcommand; subcommands add their own args. Paths default relative to the process
+          working directory (model <code>checkpoints/kokoro-v1.0.onnx</code>, voices{' '}
+          <code>data/voices-v1.0.bin</code>).
         </p>
-        <div className="flex flex-wrap gap-3">
-          <a
-            href="/about"
-            className="rounded-full border border-[rgba(50,143,151,0.3)] bg-[rgba(79,184,178,0.14)] px-5 py-2.5 text-sm font-semibold text-[var(--lagoon-deep)] no-underline transition hover:-translate-y-0.5 hover:bg-[rgba(79,184,178,0.24)]"
-          >
-            About This Starter
-          </a>
-          <a
-            href="https://tanstack.com/router"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-full border border-[rgba(23,58,64,0.2)] bg-white/50 px-5 py-2.5 text-sm font-semibold text-[var(--sea-ink)] no-underline transition hover:-translate-y-0.5 hover:border-[rgba(23,58,64,0.35)]"
-          >
-            Router Guide
-          </a>
-        </div>
       </section>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          [
-            'Type-Safe Routing',
-            'Routes and links stay in sync across every page.',
-          ],
-          [
-            'Server Functions',
-            'Call server code from your UI without creating API boilerplate.',
-          ],
-          [
-            'Streaming by Default',
-            'Ship progressively rendered responses for faster experiences.',
-          ],
-          [
-            'Tailwind Native',
-            'Design quickly with utility-first styling and reusable tokens.',
-          ],
-        ].map(([title, desc], index) => (
-          <article
-            key={title}
-            className="island-shell feature-card rise-in rounded-2xl p-5"
-            style={{ animationDelay: `${index * 90 + 80}ms` }}
-          >
-            <h2 className="mb-2 text-base font-semibold text-[var(--sea-ink)]">
-              {title}
-            </h2>
-            <p className="m-0 text-sm text-[var(--sea-ink-soft)]">{desc}</p>
-          </article>
-        ))}
+      <section className="island-shell mb-6 rounded-2xl p-6 sm:p-8">
+        <h2 className="mb-4 text-xl font-semibold text-[var(--sea-ink)]">
+          Global options (all subcommands)
+        </h2>
+        <dl className="m-0 space-y-3 text-sm text-[var(--sea-ink-soft)]">
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">
+              -l, --lan &lt;LANGUAGE&gt;
+            </dt>
+            <dd className="m-0 mt-1">
+              eSpeak-NG language id (default <code>en-us</code>); list linked from upstream
+              espeak-ng docs.
+            </dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">
+              -m, --model &lt;MODEL_PATH&gt;
+            </dt>
+            <dd className="m-0 mt-1">Kokoro v1.0 ONNX file (default checkpoints path above).</dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">
+              -d, --data &lt;DATA_PATH&gt;
+            </dt>
+            <dd className="m-0 mt-1">Voices binary (default data path above).</dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">
+              -s, --style &lt;STYLE&gt;
+            </dt>
+            <dd className="m-0 mt-1">
+              One voice or combined voices string (default <code>af_heart</code>).
+            </dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">
+              -p, --speed &lt;SPEED&gt;
+            </dt>
+            <dd className="m-0 mt-1">
+              Speech rate coefficient; &lt;1 slower, &gt;1 faster (default <code>1</code>).
+            </dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">--mono</dt>
+            <dd className="m-0 mt-1">Force mono WAV instead of stereo.</dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">
+              --initial-silence &lt;TOKENS&gt;
+            </dt>
+            <dd className="m-0 mt-1">Leading silence length in model tokens.</dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">--timestamps</dt>
+            <dd className="m-0 mt-1">
+              Emit word-level timestamps sidecar TSV alongside audio (also on some
+              subcommands).
+            </dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">
+              --instances &lt;N&gt;
+            </dt>
+            <dd className="m-0 mt-1">
+              Parallel TTS worker count (default <code>2</code>).
+            </dd>
+          </div>
+          <div>
+            <dt className="font-mono text-[var(--sea-ink)]">-h, --help / -V, --version</dt>
+            <dd className="m-0 mt-1">Help and version.</dd>
+          </div>
+        </dl>
       </section>
 
-      <section className="island-shell mt-8 rounded-2xl p-6">
-        <p className="island-kicker mb-2">Quick Start</p>
+      <section className="island-shell mb-6 rounded-2xl p-6 sm:p-8">
+        <h2 className="mb-4 text-xl font-semibold text-[var(--sea-ink)]">Subcommands</h2>
+        <ul className="m-0 list-none space-y-6 p-0">
+          <li className="border-b border-[var(--line)] pb-6 last:border-0 last:pb-0">
+            <h3 className="mb-2 font-mono text-base font-semibold text-[var(--sea-ink)]">
+              koko text [OPTIONS] [TEXT]
+            </h3>
+            <p className="m-0 mb-2 text-sm text-[var(--sea-ink-soft)]">
+              One-shot synthesis: optional <code>[TEXT]</code> argument; if omitted, uses a long
+              built-in demo string. Writes a single WAV.
+            </p>
+            <ul className="m-0 list-disc space-y-1 pl-5 text-sm text-[var(--sea-ink-soft)]">
+              <li>
+                <code>-o, --output &lt;OUTPUT_PATH&gt;</code> — default <code>output.wav</code>
+              </li>
+              <li>
+                <code>--timestamps</code> — per-invocation override for sidecar TSV
+              </li>
+            </ul>
+          </li>
+          <li className="border-b border-[var(--line)] pb-6 last:border-0 last:pb-0">
+            <h3 className="mb-2 font-mono text-base font-semibold text-[var(--sea-ink)]">
+              koko file [OPTIONS] &lt;INPUT_PATH&gt;
+            </h3>
+            <p className="m-0 mb-2 text-sm text-[var(--sea-ink-soft)]">
+              Batch: each non-empty line of the input file becomes one WAV. Replace{' '}
+              <code>{'{line}'}</code> in the output pattern with 1-based line index.
+            </p>
+            <ul className="m-0 list-disc space-y-1 pl-5 text-sm text-[var(--sea-ink-soft)]">
+              <li>
+                <code>-o, --output &lt;OUTPUT_PATH_FORMAT&gt;</code> — default{' '}
+                <code>output_{'{line}'}.wav</code>
+              </li>
+              <li>
+                <code>--timestamps</code> — sidecar TSV per line/file naming mirrors WAV
+              </li>
+            </ul>
+          </li>
+          <li className="border-b border-[var(--line)] pb-6 last:border-0 last:pb-0">
+            <h3 className="mb-2 font-mono text-base font-semibold text-[var(--sea-ink)]">
+              koko stream [OPTIONS]
+            </h3>
+            <p className="m-0 mb-2 text-sm text-[var(--sea-ink-soft)]">
+              Piping mode: read lines from stdin, write raw audio for each line to stdout
+              (suitable for shell pipelines). Optional <code>--timestamps</code> for sidecar
+              behavior per help text.
+            </p>
+          </li>
+          <li>
+            <h3 className="mb-2 font-mono text-base font-semibold text-[var(--sea-ink)]">
+              koko openai [OPTIONS]
+            </h3>
+            <p className="m-0 mb-2 text-sm text-[var(--sea-ink-soft)]">
+              Long-running HTTP server with an OpenAI-compatible TTS API surface. UI should treat
+              as a managed subprocess (bind address, log stream, shutdown).
+            </p>
+            <ul className="m-0 list-disc space-y-1 pl-5 text-sm text-[var(--sea-ink-soft)]">
+              <li>
+                <code>--ip &lt;IP&gt;</code> — default <code>0.0.0.0</code>
+              </li>
+              <li>
+                <code>--port &lt;PORT&gt;</code> — default <code>3000</code>
+              </li>
+              <li>
+                <code>--timestamps</code> — listed on server command in CLI help
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </section>
+
+      <section className="island-shell rounded-2xl p-6 sm:p-8">
+        <h2 className="mb-3 text-xl font-semibold text-[var(--sea-ink)]">
+          Integration notes (Tauri / UI)
+        </h2>
         <ul className="m-0 list-disc space-y-2 pl-5 text-sm text-[var(--sea-ink-soft)]">
           <li>
-            Edit <code>src/routes/index.tsx</code> to customize the home page.
+            Resolve <code>koko</code> on PATH or bundle sidecar; set cwd to a folder that
+            contains default <code>checkpoints/</code> and <code>data/</code> or pass explicit{' '}
+            <code>-m</code> / <code>-d</code>.
           </li>
           <li>
-            Update <code>src/components/Header.tsx</code> and{' '}
-            <code>src/components/Footer.tsx</code> for brand links.
+            Simple app flows map to <code>text</code> (preview), <code>file</code> (batch jobs),
+            <code>stream</code> (live stdin — rarely from GUI), <code>openai</code> (local API
+            toggle).
           </li>
           <li>
-            Add routes in <code>src/routes</code> and tweak visual tokens in{' '}
-            <code>src/styles.css</code>.
+            Parallelism: expose <code>--instances</code> for heavy batch UIs; respect user
+            machine limits.
+          </li>
+          <li>
+            Timestamp outputs are file-based; UI needs paths for both WAV and TSV when enabled.
           </li>
         </ul>
       </section>
