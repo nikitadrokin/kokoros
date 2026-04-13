@@ -32,30 +32,38 @@ function PlaygroundPage() {
   const [text, setText] = useState(
     "Hello from Kokoros. This page is the temporary playground while the real UI is rebuilt."
   )
-  const [style, setStyle] = useState('af_heart')
-  const [language, setLanguage] = useState('en-us')
-  const [speed, setSpeed] = useState('1.0')
-  const [modelPath, setModelPath] = useState('checkpoints/kokoro-v1.0.onnx')
-  const [dataPath, setDataPath] = useState('data/voices-v1.0.bin')
-  const [outputPath, setOutputPath] = useState('output.wav')
+  const [style, setStyle] = useState('')
+  const [language, setLanguage] = useState('')
+  const [speed, setSpeed] = useState('')
+  const [modelPath, setModelPath] = useState('')
+  const [dataPath, setDataPath] = useState('')
+  const [outputPath, setOutputPath] = useState('')
   const [initialSilence, setInitialSilence] = useState('')
   const [mono, setMono] = useState(false)
   const [timestamps, setTimestamps] = useState(false)
 
   const commandPreview = useMemo(() => {
-    const args = [
-      'koko',
-      '--lan',
-      quoteArg(language),
-      '--model',
-      quoteArg(modelPath),
-      '--data',
-      quoteArg(dataPath),
-      '--style',
-      quoteArg(style),
-      '--speed',
-      quoteArg(speed),
-    ]
+    const args = ['koko']
+
+    if (language.trim()) {
+      args.push('--lan', quoteArg(language.trim()))
+    }
+
+    if (modelPath.trim()) {
+      args.push('--model', quoteArg(modelPath.trim()))
+    }
+
+    if (dataPath.trim()) {
+      args.push('--data', quoteArg(dataPath.trim()))
+    }
+
+    if (style.trim()) {
+      args.push('--style', quoteArg(style.trim()))
+    }
+
+    if (speed.trim()) {
+      args.push('--speed', quoteArg(speed.trim()))
+    }
 
     if (initialSilence.trim()) {
       args.push('--initial-silence', quoteArg(initialSilence.trim()))
@@ -69,7 +77,11 @@ function PlaygroundPage() {
       args.push('--timestamps')
     }
 
-    args.push('text', quoteArg(text), '--output', quoteArg(outputPath))
+    args.push('text', quoteArg(text))
+
+    if (outputPath.trim()) {
+      args.push('--output', quoteArg(outputPath.trim()))
+    }
 
     return args.join(' ')
   }, [dataPath, initialSilence, language, modelPath, mono, outputPath, speed, style, text, timestamps])
@@ -105,9 +117,9 @@ function PlaygroundPage() {
               <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-1'>
                 <div className='space-y-2'>
                   <Label htmlFor='voice-select'>Voice</Label>
-                  <Select value={style} onValueChange={setStyle}>
+                  <Select value={style || undefined} onValueChange={setStyle}>
                     <SelectTrigger id='voice-select' className='w-full bg-background' aria-label='Voice style'>
-                      <SelectValue placeholder='Choose a voice' />
+                      <SelectValue placeholder='af_heart' />
                     </SelectTrigger>
                     <SelectContent>
                       {VOICE_OPTIONS.map((voice) => (
@@ -127,6 +139,7 @@ function PlaygroundPage() {
                     className='bg-background'
                     value={language}
                     onChange={(event) => setLanguage(event.target.value)}
+                    placeholder='en-us'
                   />
                 </div>
 
@@ -140,6 +153,7 @@ function PlaygroundPage() {
                     className='bg-background'
                     value={speed}
                     onChange={(event) => setSpeed(event.target.value)}
+                    placeholder='1.0'
                   />
                 </div>
 
@@ -191,6 +205,7 @@ function PlaygroundPage() {
                 className='bg-background'
                 value={modelPath}
                 onChange={(event) => setModelPath(event.target.value)}
+                placeholder='checkpoints/kokoro-v1.0.onnx'
               />
             </div>
 
@@ -202,6 +217,7 @@ function PlaygroundPage() {
                 className='bg-background'
                 value={dataPath}
                 onChange={(event) => setDataPath(event.target.value)}
+                placeholder='data/voices-v1.0.bin'
               />
             </div>
 
@@ -213,6 +229,7 @@ function PlaygroundPage() {
                 className='bg-background'
                 value={outputPath}
                 onChange={(event) => setOutputPath(event.target.value)}
+                placeholder='output.wav'
               />
             </div>
           </div>
