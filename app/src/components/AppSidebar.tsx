@@ -5,7 +5,6 @@ import {
 	SidebarGroup,
 	SidebarGroupContent,
 	SidebarGroupLabel,
-	SidebarHeader,
 	SidebarMenu,
 	SidebarMenuButton,
 	SidebarMenuItem,
@@ -28,20 +27,6 @@ export function AppSidebar() {
 
 	return (
 		<Sidebar collapsible="icon" variant="inset">
-			<SidebarHeader className="border-b border-sidebar-border">
-				<SidebarMenu>
-					<SidebarMenuItem>
-						<SidebarMenuButton size="lg" asChild tooltip="Kokoro home">
-							<Link to="/" className="font-semibold no-underline">
-								<span className="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-									K
-								</span>
-								<span>Kokoro</span>
-							</Link>
-						</SidebarMenuButton>
-					</SidebarMenuItem>
-				</SidebarMenu>
-			</SidebarHeader>
 			<SidebarContent>
 				<SidebarGroup>
 					<SidebarGroupLabel>Pages</SidebarGroupLabel>

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, FlaskConical, Info } from "lucide-react";
+import { BookOpen, FlaskConical } from "lucide-react";
 
 /**
  * Single entry in the app sidebar; extend this list when adding new file routes.
@@ -8,7 +8,7 @@ export type SidebarNavItem = {
 	/** Visible label in the sidebar */
 	title: string;
 	/** TanStack Router `to` path */
-	to: "/" | "/about" | "/playground";
+	to: "/" | "/playground";
 	/** Shown when the sidebar is collapsed (icon mode) */
 	tooltip: string;
 	Icon: LucideIcon;
@@ -29,11 +29,5 @@ export const SIDEBAR_NAV: readonly SidebarNavItem[] = [
 		to: "/playground",
 		tooltip: "Playground",
 		Icon: FlaskConical,
-	},
-	{
-		title: "About",
-		to: "/about",
-		tooltip: "About",
-		Icon: Info,
 	},
 ];
