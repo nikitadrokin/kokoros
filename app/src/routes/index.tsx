@@ -126,7 +126,10 @@ function PlaygroundPage() {
           <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-1'>
             <div className='space-y-2'>
               <Label htmlFor='voice-select'>Voice</Label>
-              <Select value={style || undefined} onValueChange={setStyle}>
+              <Select
+                value={style || undefined}
+                onValueChange={(value) => setStyle(value ?? '')}
+              >
                 <SelectTrigger
                   id='voice-select'
                   className='w-full'
