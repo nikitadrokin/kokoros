@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { FileAudio } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -110,7 +109,7 @@ function PlaygroundPage() {
         </div>
       </div>
 
-      <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'>
+      <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] py-4'>
         <div className='space-y-2'>
           <Label htmlFor='playground-text'>Text</Label>
           <Textarea
@@ -123,7 +122,7 @@ function PlaygroundPage() {
           />
         </div>
 
-        <div className='grid gap-3'>
+        <div className='grid w-full min-w-0 gap-3 self-start'>
           <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-1'>
             <div className='space-y-2'>
               <Label htmlFor='voice-select'>Voice</Label>
@@ -210,7 +209,7 @@ function PlaygroundPage() {
         </div>
       </div>
 
-      <div className='grid gap-3 border-t pt-4 md:grid-cols-3'>
+      <div className='grid gap-3 border-t py-4 md:grid-cols-3'>
         <div className='space-y-2'>
           <Label htmlFor='model-path'>Model path</Label>
           <Input
@@ -248,23 +247,23 @@ function PlaygroundPage() {
         </div>
       </div>
 
-      <div className='grid gap-3 border-t pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
-        <div className='space-y-2'>
+      <div className='grid gap-3 border-t py-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
+        <div className='space-y-2 self-start'>
           <div className='flex items-center gap-2 text-sm font-medium'>
             <FileAudio className='size-4 text-muted-foreground' />
             Audio
           </div>
-          <div className='rounded-lg border bg-muted/20 p-3'>
+          <div className='flex items-center rounded-lg border bg-muted/20 p-3'>
             <audio
               controls
               preload='none'
               aria-label='Generated audio preview'
-              className='w-full'
+              className='h-10 w-full'
             />
           </div>
         </div>
 
-        <div className='space-y-2'>
+        <div className='space-y-2 self-start'>
           <Label>Command preview</Label>
           <pre className='overflow-x-auto rounded-lg border bg-muted/20 p-3 text-xs leading-5 text-foreground'>
             <code>{commandPreview}</code>
