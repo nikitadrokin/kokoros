@@ -115,7 +115,7 @@ function PlaygroundPage() {
           <Textarea
             id='playground-text'
             aria-label='Text to synthesize'
-            className='min-h-56 resize-y bg-background'
+            className='min-h-56 resize-y'
             value={text}
             onChange={(event) => setText(event.target.value)}
             placeholder='Enter text for Kokoros to synthesize.'
@@ -129,7 +129,7 @@ function PlaygroundPage() {
               <Select value={style || undefined} onValueChange={setStyle}>
                 <SelectTrigger
                   id='voice-select'
-                  className='w-full bg-background'
+                  className='w-full'
                   aria-label='Voice style'
                 >
                   <SelectValue placeholder='af_heart' />
@@ -149,7 +149,6 @@ function PlaygroundPage() {
               <Input
                 id='language-input'
                 aria-label='Language flag'
-                className='bg-background'
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
                 placeholder='en-us'
@@ -163,7 +162,6 @@ function PlaygroundPage() {
                 aria-label='Speed flag'
                 type='number'
                 step='0.1'
-                className='bg-background'
                 value={speed}
                 onChange={(event) => setSpeed(event.target.value)}
                 placeholder='1.0'
@@ -177,7 +175,6 @@ function PlaygroundPage() {
                 aria-label='Initial silence'
                 type='number'
                 min='0'
-                className='bg-background'
                 value={initialSilence}
                 onChange={(event) => setInitialSilence(event.target.value)}
                 placeholder='Optional'
@@ -215,7 +212,6 @@ function PlaygroundPage() {
           <Input
             id='model-path'
             aria-label='Model path'
-            className='bg-background'
             value={modelPath}
             onChange={(event) => setModelPath(event.target.value)}
             placeholder='checkpoints/kokoro-v1.0.onnx'
@@ -227,7 +223,6 @@ function PlaygroundPage() {
           <Input
             id='data-path'
             aria-label='Voice data path'
-            className='bg-background'
             value={dataPath}
             onChange={(event) => setDataPath(event.target.value)}
             placeholder='data/voices-v1.0.bin'
@@ -239,7 +234,6 @@ function PlaygroundPage() {
           <Input
             id='output-path'
             aria-label='Output path'
-            className='bg-background'
             value={outputPath}
             onChange={(event) => setOutputPath(event.target.value)}
             placeholder='output.wav'
