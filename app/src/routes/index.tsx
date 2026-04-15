@@ -108,9 +108,6 @@ function PlaygroundPage() {
             Basic text, voice, flags, and audio playback.
           </p>
         </div>
-        <p className='text-xs text-muted-foreground'>
-          Single-route temporary UI
-        </p>
       </div>
 
       <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'>
