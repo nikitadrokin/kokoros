@@ -3,11 +3,7 @@
 
 @import 'tw-animate-css';
 
-@import "tw-animate-css";
-
-@import "shadcn/tailwind.css";
-
-@import "@fontsource-variable/geist";
+@import '@fontsource-variable/geist';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -134,65 +130,6 @@ body,
 
 * {
   box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  background:
-    radial-gradient(circle at top, color-mix(in oklab, var(--primary) 8%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in oklab, var(--background) 92%, white 8%), var(--background));
-  overflow-x: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.4;
-  background:
-    radial-gradient(circle at 15% 15%, color-mix(in oklab, white 80%, transparent), transparent 24%),
-    radial-gradient(circle at 85% 5%, color-mix(in oklab, var(--primary) 10%, transparent), transparent 28%);
-}
-
-a {
-  color: var(--foreground);
-  text-decoration-color: color-mix(in oklab, var(--foreground) 18%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
-a:hover {
-  color: color-mix(in oklab, var(--foreground) 82%, var(--primary) 18%);
-}
-
-code {
-  font-size: 0.9em;
-  border: 1px solid var(--border);
-  background: color-mix(in oklab, var(--muted) 72%, transparent);
-  border-radius: 7px;
-  padding: 2px 7px;
-}
-
-pre code {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-  color: inherit;
-}
-
-.prose pre {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #1d2e45;
-  color: #e8efff;
 }
 
 @layer base {
