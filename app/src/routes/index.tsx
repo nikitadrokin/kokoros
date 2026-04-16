@@ -275,6 +275,7 @@ function PlaygroundPage() {
                   <Label htmlFor='voice-select'>Voice</Label>
                   <Select
                     value={style}
+                    // ts complains of string | null
                     onValueChange={(value) => setStyle(value ?? '')}
                   >
                     <SelectTrigger
