@@ -1066,7 +1066,7 @@ dependencies = [
 
 [[package]]
 name = "koko"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clap",
  "kokoros",
@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "kokoros"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "espeak-rs",
  "hound",
@@ -1100,7 +1100,7 @@ dependencies = [
 
 [[package]]
 name = "kokoros-openai"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "axum",
  "futures",
