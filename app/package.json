@@ -24,6 +24,7 @@
     "@base-ui/react": "^1.4.0",
     "@fontsource-variable/geist": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
+    "@lingo-reader/epub-parser": "^0.4.6",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-router": "latest",
     "@tauri-apps/api": "^2.10.1",
