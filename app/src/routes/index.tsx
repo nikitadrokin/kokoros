@@ -273,7 +273,10 @@ function PlaygroundPage() {
               <CardContent className='grid gap-3'>
                 <div className='space-y-2'>
                   <Label htmlFor='voice-select'>Voice</Label>
-                  <Select value={style} onValueChange={setStyle}>
+                  <Select
+                    value={style}
+                    onValueChange={(value) => setStyle(value ?? '')}
+                  >
                     <SelectTrigger
                       id='voice-select'
                       className='w-full'
