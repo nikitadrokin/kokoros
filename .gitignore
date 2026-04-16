@@ -1,0 +1,4 @@
+# Downloaded Kokoro weights (see cli download scripts / release URLs)
+/checkpoints/
+/data/
+*.onnx
