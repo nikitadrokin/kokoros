@@ -7,7 +7,7 @@ export default function Footer() {
         <p className="m-0 text-sm">
           &copy; {year} Your name here. All rights reserved.
         </p>
-        <p className="island-kicker m-0">Built with TanStack Start</p>
+        <p className="island-kicker m-0">Built with Tauri and TanStack Router</p>
       </div>
       <div className="mt-4 flex justify-center gap-4">
         <a
