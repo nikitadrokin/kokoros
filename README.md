@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="app/src-tauri/icons/icon.png" alt="Kokoros app icon" width="96" height="96">
+
 # Kokoros
 
 Local Kokoro text-to-speech in a desktop playground, backed by a fast Rust sidecar.
