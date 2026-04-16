@@ -2,6 +2,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import {
+  AudioLinesIcon,
   FileAudio,
   LoaderCircle,
   Play,
@@ -224,12 +225,12 @@ function PlaygroundPage() {
               {isGenerating ? (
                 <LoaderCircle className='size-4 animate-spin' />
               ) : (
-                <Sparkles className='size-4' />
+                <AudioLinesIcon className='size-4' />
               )}
               {isGenerating ? 'Generating…' : 'Generate Audio'}
             </Button>
             <Button
-              variant='outline'
+              variant='secondary'
               onClick={handlePlay}
               disabled={!audioUrl || isGenerating}
             >
