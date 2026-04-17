@@ -1,21 +1,32 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { AudioLinesIcon, BookOpenIcon } from 'lucide-react';
+import { AudioLinesIcon, BookOpenIcon, WandSparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ThemeToggle from './ThemeToggle';
 import {
 	NavigationMenu,
+	NavigationMenuContent,
 	NavigationMenuItem,
 	NavigationMenuLink,
 	NavigationMenuList,
+	NavigationMenuTrigger,
 } from './ui/navigation-menu';
 
-const navItems = [
+const speechItems = [
 	{
 		to: '/',
-		label: 'Speech',
+		label: 'Generate speech',
 		description: 'Generate and audition Kokoros audio',
 		icon: AudioLinesIcon,
 	},
+	{
+		to: '/speech/optimize',
+		label: 'Optimize text',
+		description: 'Prepare Markdown for text to speech',
+		icon: WandSparkles,
+	},
+] as const;
+
+const navItems = [
 	{
 		to: '/epub',
 		label: 'EPUB reader',
@@ -28,6 +39,7 @@ export default function Header() {
 	const pathname = useRouterState({
 		select: (state) => state.location.pathname,
 	});
+	const isSpeechActive = pathname === '/' || pathname.startsWith('/speech');
 
 	return (
 		<header className="sticky top-0 z-50 border-b bg-background/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -45,6 +57,49 @@ export default function Header() {
 
 				<NavigationMenu className="min-w-0 flex-1 justify-start" align="start">
 					<NavigationMenuList className="justify-start gap-1 overflow-x-auto">
+						<NavigationMenuItem>
+							<NavigationMenuTrigger
+								className={cn(
+									'h-9 gap-1.5 whitespace-nowrap rounded-full px-3 py-2 font-medium',
+									isSpeechActive && 'bg-muted text-foreground',
+								)}
+								aria-label="Speech tools"
+							>
+								<AudioLinesIcon
+									className="size-4 text-muted-foreground"
+									aria-hidden="true"
+								/>
+								<span>Speech</span>
+							</NavigationMenuTrigger>
+							<NavigationMenuContent className="w-[min(28rem,calc(100vw-2rem))]">
+								<div className="grid gap-1">
+									{speechItems.map((item) => {
+										const Icon = item.icon;
+										const isActive = pathname === item.to;
+
+										return (
+											<NavigationMenuLink
+												key={item.to}
+												active={isActive}
+												render={<Link to={item.to} />}
+												className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 rounded-2xl px-3 py-3"
+												aria-label={item.description}
+											>
+												<Icon
+													className="mt-0.5 size-4 text-muted-foreground"
+													aria-hidden="true"
+												/>
+												<span className="font-medium">{item.label}</span>
+												<span className="col-start-2 text-muted-foreground text-xs leading-5">
+													{item.description}
+												</span>
+											</NavigationMenuLink>
+										);
+									})}
+								</div>
+							</NavigationMenuContent>
+						</NavigationMenuItem>
+
 						{navItems.map((item) => {
 							const Icon = item.icon;
 							const isActive = pathname === item.to;

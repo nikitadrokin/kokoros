@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as EpubRouteImport } from './routes/epub'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SpeechOptimizeRouteImport } from './routes/speech/optimize'
 
 const EpubRoute = EpubRouteImport.update({
   id: '/epub',
@@ -22,31 +23,40 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpeechOptimizeRoute = SpeechOptimizeRouteImport.update({
+  id: '/speech/optimize',
+  path: '/speech/optimize',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
+  '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
+  '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
+  '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/epub'
+  fullPaths: '/' | '/epub' | '/speech/optimize'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/epub'
-  id: '__root__' | '/' | '/epub'
+  to: '/' | '/epub' | '/speech/optimize'
+  id: '__root__' | '/' | '/epub' | '/speech/optimize'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EpubRoute: typeof EpubRoute
+  SpeechOptimizeRoute: typeof SpeechOptimizeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/speech/optimize': {
+      id: '/speech/optimize'
+      path: '/speech/optimize'
+      fullPath: '/speech/optimize'
+      preLoaderRoute: typeof SpeechOptimizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EpubRoute: EpubRoute,
+  SpeechOptimizeRoute: SpeechOptimizeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
