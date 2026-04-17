@@ -1,8 +1,8 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { AudioLinesIcon, FileAudio, LoaderCircle, Play } from 'lucide-react';
 import { startTransition, useEffect, useRef, useState } from 'react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -13,7 +13,6 @@ import {
 	SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
 
 export const Route = createFileRoute('/')({ component: PlaygroundPage });
 
@@ -107,9 +106,9 @@ function PlaygroundPage() {
 	};
 
 	return (
-		<main className="min-h-screen p-4 md:p-6">
+		<main className="min-h-[calc(100vh-4.5rem)] p-4 md:p-6">
 			<div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-				<div className="flex flex-wrap items-start justify-between gap-3 pb-4">
+				<div className="pb-4">
 					<div className="space-y-1">
 						<h1 className="font-semibold text-2xl tracking-tight">
 							Generate and audition speech
@@ -119,12 +118,6 @@ function PlaygroundPage() {
 							automatically; use Play to hear it again.
 						</p>
 					</div>
-					<Link
-						to="/epub"
-						className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-					>
-						EPUB reader
-					</Link>
 				</div>
 
 				<div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">

@@ -4,7 +4,7 @@ import {
 	initEpubFile,
 	type NavPoint,
 } from '@lingo-reader/epub-parser';
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { BookOpen, ChevronRight, LoaderCircle, Upload } from 'lucide-react';
 import {
 	startTransition,
@@ -13,10 +13,9 @@ import {
 	useRef,
 	useState,
 } from 'react';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { cn } from '@/lib/utils';
 
 export const Route = createFileRoute('/epub')({ component: EpubReaderPage });
 
@@ -187,9 +186,9 @@ function EpubReaderPage() {
 	};
 
 	return (
-		<main className="min-h-screen bg-[radial-gradient(circle_at_top_left,hsl(var(--muted))_0,transparent_30%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.35))] p-4 md:p-6">
+		<main className="min-h-[calc(100vh-4.5rem)] bg-[radial-gradient(circle_at_top_left,hsl(var(--muted))_0,transparent_30%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.35))] p-4 md:p-6">
 			<div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-				<div className="flex flex-wrap items-start justify-between gap-3 pb-2">
+				<div className="pb-2">
 					<div className="space-y-1">
 						<h1 className="font-semibold text-2xl tracking-tight">
 							EPUB reader
@@ -199,12 +198,6 @@ function EpubReaderPage() {
 							inline.
 						</p>
 					</div>
-					<Link
-						to="/"
-						className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-					>
-						Speech playground
-					</Link>
 				</div>
 
 				<div className="grid gap-4 lg:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.6fr)]">

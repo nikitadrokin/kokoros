@@ -1,4 +1,5 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
+import Header from '@/components/Header';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 export const Route = createRootRoute({
@@ -8,7 +9,10 @@ export const Route = createRootRoute({
 function RootLayout() {
 	return (
 		<TooltipProvider>
-			<Outlet />
+			<div className="min-h-screen bg-background text-foreground">
+				<Header />
+				<Outlet />
+			</div>
 		</TooltipProvider>
 	);
 }
