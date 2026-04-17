@@ -80,7 +80,9 @@ function buildChapterList(epub: EpubFile): ChapterListItem[] {
 
 function chapterDocument(chapter: EpubProcessedChapter): string {
   const links = chapter.css
-    .map((part) => `<link rel="stylesheet" href=${JSON.stringify(part.href)} />`)
+    .map(
+      (part) => `<link rel="stylesheet" href=${JSON.stringify(part.href)} />`,
+    )
     .join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/>${links}</head><body>${chapter.html}</body></html>`;
 }
@@ -159,8 +161,7 @@ function EpubReaderPage() {
         await openChapter(epub, first.id, selector);
       }
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : String(caught);
+      const message = caught instanceof Error ? caught.message : String(caught);
       setError(message);
     } finally {
       setIsBusy(false);
@@ -178,8 +179,7 @@ function EpubReaderPage() {
       const selector = item.kind === 'toc' ? item.selector : '';
       await openChapter(epub, item.id, selector);
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : String(caught);
+      const message = caught instanceof Error ? caught.message : String(caught);
       setError(message);
     } finally {
       setIsBusy(false);
@@ -208,14 +208,14 @@ function EpubReaderPage() {
         </div>
 
         <div className='grid gap-4 lg:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.6fr)]'>
-          <Card className='border-border/70 bg-background/90 shadow-sm backdrop-blur lg:self-start'>
+          <Card className='shadow-sm backdrop-blur lg:self-start'>
             <CardHeader className='space-y-1'>
               <CardTitle className='flex items-center gap-2 text-base'>
                 <BookOpen className='size-4 text-muted-foreground' />
                 Library
               </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='grid gap-4 pt-4'>
               <input
                 ref={fileInputRef}
                 type='file'
@@ -257,11 +257,11 @@ function EpubReaderPage() {
                 </div>
               ) : null}
 
-              <div className='max-h-[min(60vh,520px)] space-y-0 overflow-y-auto rounded-lg border bg-muted/15'>
+              <div className='max-h-[min(60vh,520px)] space-y-0 overflow-y-auto rounded-lg'>
                 {chapters.length === 0 ? (
                   <p className='p-3 text-sm text-muted-foreground'>
-                    No chapters yet. Choose an EPUB to list its spine or table of
-                    contents.
+                    No chapters yet. Choose an EPUB to list its spine or table
+                    of contents.
                   </p>
                 ) : (
                   <ul className='divide-y'>
@@ -291,16 +291,19 @@ function EpubReaderPage() {
             </CardContent>
           </Card>
 
-          <Card className='border-border/70 bg-background/90 shadow-sm backdrop-blur'>
+          <Card className='border-border/70 shadow-sm backdrop-blur'>
             <CardHeader>
               <CardTitle className='text-base'>Reading pane</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className='overflow-hidden rounded-lg border bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'>
+              <div className='overflow-hidden rounded-lg border'>
                 <iframe
                   ref={iframeRef}
                   title='EPUB chapter'
                   className='h-[min(70vh,640px)] w-full border-0'
+                  style={{
+                    backgroundColor: 'red !important',
+                  }}
                   sandbox='allow-same-origin'
                   srcDoc={activeChapter?.srcDoc}
                   onLoad={() => {
