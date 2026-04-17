@@ -11,13 +11,13 @@ type ProcessShim = {
 
 const shim: ProcessShim = {
 	env: {},
-	cwd: () => "/",
+	cwd: () => '/',
 	nextTick: (cb) => {
 		queueMicrotask(cb);
 	},
 	emit: () => false,
 };
 
-if (typeof globalThis.process === "undefined") {
-	Reflect.set(globalThis, "process", shim);
+if (typeof globalThis.process === 'undefined') {
+	Reflect.set(globalThis, 'process', shim);
 }

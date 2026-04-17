@@ -1,35 +1,35 @@
 import {
+	type EpubFile,
+	type EpubProcessedChapter,
+	initEpubFile,
+	type NavPoint,
+} from '@lingo-reader/epub-parser';
+import { createFileRoute, Link } from '@tanstack/react-router';
+import { BookOpen, ChevronRight, LoaderCircle, Upload } from 'lucide-react';
+import {
 	startTransition,
 	useCallback,
 	useEffect,
 	useRef,
 	useState,
-} from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	type EpubFile,
-	type EpubProcessedChapter,
-	type NavPoint,
-	initEpubFile,
-} from "@lingo-reader/epub-parser";
-import { BookOpen, ChevronRight, LoaderCircle, Upload } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+} from 'react';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
-export const Route = createFileRoute("/epub")({ component: EpubReaderPage });
+export const Route = createFileRoute('/epub')({ component: EpubReaderPage });
 
 /** One spine row when the book has no usable NCX / nav tree. */
 type SpineListItem = {
-	kind: "spine";
+	kind: 'spine';
 	id: string;
 	label: string;
 };
 
 /** One TOC row resolved to a loadable manifest id. */
 type TocListItem = {
-	kind: "toc";
+	kind: 'toc';
 	id: string;
 	label: string;
 	selector: string;
@@ -51,7 +51,7 @@ function flattenNavPoints(
 		const resolved = epub.resolveHref(point.href);
 		if (resolved) {
 			rows.push({
-				kind: "toc",
+				kind: 'toc',
 				id: resolved.id,
 				label: point.label,
 				selector: resolved.selector,
@@ -72,9 +72,9 @@ function buildChapterList(epub: EpubFile): ChapterListItem[] {
 	}
 	const spine = epub.getSpine();
 	return spine.map((item) => ({
-		kind: "spine",
+		kind: 'spine',
 		id: item.id,
-		label: item.href.split("/").pop() ?? item.id,
+		label: item.href.split('/').pop() ?? item.id,
 	}));
 }
 
@@ -83,7 +83,7 @@ function chapterDocument(chapter: EpubProcessedChapter): string {
 		.map(
 			(part) => `<link rel="stylesheet" href=${JSON.stringify(part.href)} />`,
 		)
-		.join("");
+		.join('');
 	return `<!DOCTYPE html><html><head><meta charset="utf-8"/>${links}</head><body>${chapter.html}</body></html>`;
 }
 
@@ -92,14 +92,14 @@ function EpubReaderPage() {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const epubRef = useRef<EpubFile | null>(null);
 
-	const [bookTitle, setBookTitle] = useState("");
+	const [bookTitle, setBookTitle] = useState('');
 	const [chapters, setChapters] = useState<ChapterListItem[]>([]);
 	const [activeChapter, setActiveChapter] = useState<{
 		srcDoc: string;
 		scrollSelector: string;
 	} | null>(null);
 	const [isBusy, setIsBusy] = useState(false);
-	const [error, setError] = useState("");
+	const [error, setError] = useState('');
 
 	const disposeEpub = useCallback(() => {
 		const current = epubRef.current;
@@ -109,7 +109,7 @@ function EpubReaderPage() {
 		}
 		setChapters([]);
 		setActiveChapter(null);
-		setBookTitle("");
+		setBookTitle('');
 	}, []);
 
 	useEffect(() => {
@@ -127,7 +127,7 @@ function EpubReaderPage() {
 			return;
 		}
 		const target = doc.querySelector(selector);
-		target?.scrollIntoView({ behavior: "smooth", block: "start" });
+		target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}, []);
 
 	const openChapter = useCallback(
@@ -145,7 +145,7 @@ function EpubReaderPage() {
 		if (!file) {
 			return;
 		}
-		setError("");
+		setError('');
 		setIsBusy(true);
 		disposeEpub();
 		try {
@@ -157,7 +157,7 @@ function EpubReaderPage() {
 			setChapters(list);
 			const first = list[0];
 			if (first) {
-				const selector = first.kind === "toc" ? first.selector : "";
+				const selector = first.kind === 'toc' ? first.selector : '';
 				await openChapter(epub, first.id, selector);
 			}
 		} catch (caught) {
@@ -173,10 +173,10 @@ function EpubReaderPage() {
 		if (!epub) {
 			return;
 		}
-		setError("");
+		setError('');
 		setIsBusy(true);
 		try {
-			const selector = item.kind === "toc" ? item.selector : "";
+			const selector = item.kind === 'toc' ? item.selector : '';
 			await openChapter(epub, item.id, selector);
 		} catch (caught) {
 			const message = caught instanceof Error ? caught.message : String(caught);
@@ -191,17 +191,17 @@ function EpubReaderPage() {
 			<div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
 				<div className="flex flex-wrap items-start justify-between gap-3 pb-2">
 					<div className="space-y-1">
-						<h1 className="text-2xl font-semibold tracking-tight">
+						<h1 className="font-semibold text-2xl tracking-tight">
 							EPUB reader
 						</h1>
-						<p className="max-w-2xl text-sm text-muted-foreground">
+						<p className="max-w-2xl text-muted-foreground text-sm">
 							Open an EPUB, browse the table of contents, and read chapters
 							inline.
 						</p>
 					</div>
 					<Link
 						to="/"
-						className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+						className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
 					>
 						Speech playground
 					</Link>
@@ -225,7 +225,7 @@ function EpubReaderPage() {
 								onChange={(event) => {
 									const next = event.target.files?.[0];
 									void handleFileChange(next);
-									event.target.value = "";
+									event.target.value = '';
 								}}
 							/>
 							<div className="space-y-2">
@@ -248,18 +248,18 @@ function EpubReaderPage() {
 							</div>
 
 							{bookTitle ? (
-								<p className="text-sm font-medium leading-snug">{bookTitle}</p>
+								<p className="font-medium text-sm leading-snug">{bookTitle}</p>
 							) : null}
 
 							{error ? (
-								<div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+								<div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
 									{error}
 								</div>
 							) : null}
 
 							<div className="max-h-[min(60vh,520px)] space-y-0 overflow-y-auto rounded-lg">
 								{chapters.length === 0 ? (
-									<p className="p-3 text-sm text-muted-foreground">
+									<p className="p-3 text-muted-foreground text-sm">
 										No chapters yet. Choose an EPUB to list its spine or table
 										of contents.
 									</p>
@@ -272,7 +272,7 @@ function EpubReaderPage() {
 													className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60"
 													style={{
 														paddingLeft:
-															item.kind === "toc"
+															item.kind === 'toc'
 																? `${12 + item.depth * 12}px`
 																: undefined,
 													}}
@@ -302,7 +302,7 @@ function EpubReaderPage() {
 									title="EPUB chapter"
 									className="h-[min(70vh,640px)] w-full border-0"
 									style={{
-										backgroundColor: "red !important",
+										backgroundColor: 'red !important',
 									}}
 									sandbox="allow-same-origin"
 									srcDoc={activeChapter?.srcDoc}
