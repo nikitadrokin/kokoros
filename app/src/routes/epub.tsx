@@ -30,6 +30,8 @@ type SpineListItem = {
 type TocListItem = {
 	kind: 'toc';
 	id: string;
+	navId: string;
+	playOrder: string;
 	label: string;
 	selector: string;
 	depth: number;
@@ -52,6 +54,8 @@ function flattenNavPoints(
 			rows.push({
 				kind: 'toc',
 				id: resolved.id,
+				navId: point.id,
+				playOrder: point.playOrder,
 				label: point.label,
 				selector: resolved.selector,
 				depth,
@@ -77,13 +81,19 @@ function buildChapterList(epub: EpubFile): ChapterListItem[] {
 	}));
 }
 
+function chapterListItemKey(item: ChapterListItem): string {
+	return item.kind === 'toc'
+		? `toc-${item.navId}-${item.playOrder}-${item.id}-${item.selector}`
+		: `spine-${item.id}`;
+}
+
 function chapterDocument(chapter: EpubProcessedChapter): string {
 	const links = chapter.css
 		.map(
 			(part) => `<link rel="stylesheet" href=${JSON.stringify(part.href)} />`,
 		)
 		.join('');
-	return `<!DOCTYPE html><html><head><meta charset="utf-8"/>${links}</head><body>${chapter.html}</body></html>`;
+	return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>${links}</head><body>${chapter.html}</body></html>`;
 }
 
 function EpubReaderPage() {
@@ -186,7 +196,7 @@ function EpubReaderPage() {
 	};
 
 	return (
-		<main className="min-h-[calc(100vh-4.5rem)] bg-[radial-gradient(circle_at_top_left,hsl(var(--muted))_0,transparent_30%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.35))] p-4 md:p-6">
+		<main className="min-h-[calc(100vh-4.5rem)] p-4 md:p-6">
 			<div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
 				<div className="pb-2">
 					<div className="space-y-1">
@@ -200,8 +210,8 @@ function EpubReaderPage() {
 					</div>
 				</div>
 
-				<div className="grid gap-4 lg:grid-cols-[minmax(260px,0.9fr)_minmax(0,1.6fr)]">
-					<Card className="shadow-sm backdrop-blur lg:self-start">
+				<div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
+					<Card className="min-w-0 shadow-sm backdrop-blur lg:self-start">
 						<CardHeader className="space-y-1">
 							<CardTitle className="flex items-center gap-2 text-base">
 								<BookOpen className="size-4 text-muted-foreground" />
@@ -250,7 +260,7 @@ function EpubReaderPage() {
 								</div>
 							) : null}
 
-							<div className="max-h-[min(60vh,520px)] space-y-0 overflow-y-auto rounded-lg">
+							<div className="max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]">
 								{chapters.length === 0 ? (
 									<p className="p-3 text-muted-foreground text-sm">
 										No chapters yet. Choose an EPUB to list its spine or table
@@ -258,8 +268,8 @@ function EpubReaderPage() {
 									</p>
 								) : (
 									<ul className="divide-y">
-										{chapters.map((item, index) => (
-											<li key={`${item.kind}-${item.id}-${index}`}>
+										{chapters.map((item) => (
+											<li key={chapterListItemKey(item)}>
 												<button
 													type="button"
 													className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60"
@@ -284,19 +294,16 @@ function EpubReaderPage() {
 						</CardContent>
 					</Card>
 
-					<Card className="border-border/70 shadow-sm backdrop-blur">
+					<Card className="min-w-0 border-border/70 shadow-sm backdrop-blur">
 						<CardHeader>
 							<CardTitle className="text-base">Reading pane</CardTitle>
 						</CardHeader>
-						<CardContent>
+						<CardContent className="min-w-0">
 							<div className="overflow-hidden rounded-lg border">
 								<iframe
 									ref={iframeRef}
 									title="EPUB chapter"
-									className="h-[min(70vh,640px)] w-full border-0"
-									style={{
-										backgroundColor: 'red !important',
-									}}
+									className="h-[clamp(260px,62dvh,640px)] w-full border-0 bg-background lg:h-[clamp(260px,70dvh,640px)]"
 									sandbox="allow-same-origin"
 									srcDoc={activeChapter?.srcDoc}
 									onLoad={() => {
