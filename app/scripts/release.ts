@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Build a Tauri release, optionally bump patch version, and optionally publish
- * a GitHub release (--auto).
+ * Build a Tauri release, optionally bump patch version, and publish a GitHub
+ * release by default. Pass `--dry-run` to skip publishing and print manual
+ * steps instead.
  *
  * Homebrew cask update scaffolding is kept below but intentionally disabled
  * until this project is wired to a tap.
@@ -22,6 +23,12 @@ const CYAN = '\x1b[0;36m';
 const YELLOW = '\x1b[0;33m';
 const NC = '\x1b[0m';
 
+/** Parsed CLI flags for `release.ts`. */
+type ReleaseCliArgs = {
+  /** When true, build only and print manual publish steps (no git/gh). */
+  dryRun: boolean;
+};
+
 const scriptDir = import.meta.dir;
 const projectRoot = join(scriptDir, '..');
 const tauriConfPath = join(projectRoot, 'src-tauri/tauri.conf.json');
@@ -35,8 +42,8 @@ const dmgDir = join(projectRoot, 'src-tauri/target/release/bundle/dmg');
 // 3. Update updateCaskFile(...) with the release URL for this repo/tap.
 // const caskFilePath = join(projectRoot, '../homebrew-tap/Casks/kokoros.rb');
 
-function parseArgs(argv: string[]): { autoPublish: boolean } {
-  return { autoPublish: argv.includes('--auto') };
+function parseArgs(argv: string[]): ReleaseCliArgs {
+  return { dryRun: argv.includes('--dry-run') };
 }
 
 async function readTauriVersion(path: string): Promise<string> {
@@ -258,7 +265,7 @@ function spawnGhInherit(args: string[]): void {
 }
 
 async function main(): Promise<void> {
-  const { autoPublish } = parseArgs(process.argv.slice(2));
+  const { dryRun } = parseArgs(process.argv.slice(2));
 
   const currentVersion = await readTauriVersion(tauriConfPath);
   const nextVersion = nextPatchVersion(currentVersion);
@@ -356,7 +363,7 @@ async function main(): Promise<void> {
   console.log(`SHA256:           ${CYAN}${sha256}${NC}`);
   console.log(`${GREEN}═══════════════════════════════════════════════════════════════${NC}`);
 
-  if (autoPublish) {
+  if (!dryRun) {
     console.log('');
     console.log(`${CYAN}Publishing release...${NC}`);
 
@@ -456,7 +463,7 @@ async function main(): Promise<void> {
       `     gh release create v${versionToBuild} "${dmgPath}" --title "v${versionToBuild}" --generate-notes`,
     );
     console.log('');
-    console.log(`${YELLOW}Tip: Run with --auto to publish automatically.${NC}`);
+    console.log(`${YELLOW}Tip: Omit --dry-run to publish automatically.${NC}`);
     console.log('');
   }
 }
