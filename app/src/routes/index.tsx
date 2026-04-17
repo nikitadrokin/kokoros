@@ -107,7 +107,7 @@ function PlaygroundPage() {
   };
 
   return (
-    <main className='min-h-screen bg-[radial-gradient(circle_at_top_left,hsl(var(--muted))_0,transparent_30%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.35))] p-4 md:p-6'>
+    <main className='min-h-screen p-4 md:p-6'>
       <div className='mx-auto flex w-full max-w-6xl flex-col gap-4'>
         <div className='flex flex-wrap items-start justify-between gap-3 pb-4'>
           <div className='space-y-1'>
@@ -128,7 +128,7 @@ function PlaygroundPage() {
         </div>
 
         <div className='grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]'>
-          <Card className='border-border/70 bg-background/90 shadow-sm backdrop-blur'>
+          <Card className='shadow-sm backdrop-blur'>
             <CardHeader>
               <CardTitle>Script</CardTitle>
             </CardHeader>
@@ -169,7 +169,7 @@ function PlaygroundPage() {
               </div>
 
               {error ? (
-                <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive'>
+                <div className='rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive'>
                   {error}
                 </div>
               ) : null}
@@ -189,15 +189,15 @@ function PlaygroundPage() {
             </CardContent>
           </Card>
 
-          <Card className='border-border/70 bg-background/90 shadow-sm backdrop-blur xl:self-start'>
+          <Card className='shadow-sm backdrop-blur xl:self-start'>
             <CardHeader>
               <CardTitle className='flex items-center gap-2'>
                 <FileAudio className='size-4 text-muted-foreground' />
                 Audio
               </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-3'>
-              <div className='rounded-lg border bg-muted/20 p-3'>
+            <CardContent className='gap-3 grid'>
+              <div className='rounded-lg'>
                 <audio
                   ref={audioRef}
                   controls
