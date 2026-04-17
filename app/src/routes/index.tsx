@@ -1,8 +1,9 @@
 import { startTransition, useEffect, useRef, useState } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { invoke } from '@tauri-apps/api/core';
 import { AudioLinesIcon, FileAudio, LoaderCircle, Play } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -108,14 +109,22 @@ function PlaygroundPage() {
   return (
     <main className='min-h-screen bg-[radial-gradient(circle_at_top_left,hsl(var(--muted))_0,transparent_30%),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)/0.35))] p-4 md:p-6'>
       <div className='mx-auto flex w-full max-w-6xl flex-col gap-4'>
-        <div className='space-y-1 pb-4'>
-          <h1 className='text-2xl font-semibold tracking-tight'>
-            Generate and audition speech
-          </h1>
-          <p className='max-w-2xl text-sm text-muted-foreground'>
-            Write your script, pick a voice, then generate. New audio plays
-            automatically; use Play to hear it again.
-          </p>
+        <div className='flex flex-wrap items-start justify-between gap-3 pb-4'>
+          <div className='space-y-1'>
+            <h1 className='text-2xl font-semibold tracking-tight'>
+              Generate and audition speech
+            </h1>
+            <p className='max-w-2xl text-sm text-muted-foreground'>
+              Write your script, pick a voice, then generate. New audio plays
+              automatically; use Play to hear it again.
+            </p>
+          </div>
+          <Link
+            to='/epub'
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+          >
+            EPUB reader
+          </Link>
         </div>
 
         <div className='grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]'>
