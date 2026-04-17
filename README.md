@@ -138,6 +138,12 @@ cd app
 bun run release:tauri
 ```
 
+If macOS blocks the app from opening, you may need to run this command:
+
+```bash
+xattr -cr /Applications/Kokoros.app
+```
+
 The Tauri bundle includes:
 
 - `models/kokoro-v1.0.onnx`
