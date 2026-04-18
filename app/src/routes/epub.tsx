@@ -2,20 +2,27 @@ import geistCyrillicFontUrl from '@fontsource-variable/geist/files/geist-cyrilli
 import geistLatinExtFontUrl from '@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2?url';
 import geistLatinFontUrl from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url';
 import {
-	type EpubFile,
-	type EpubProcessedChapter,
-	initEpubFile,
-	type NavPoint,
+  type EpubFile,
+  type EpubProcessedChapter,
+  initEpubFile,
+  type NavPoint,
 } from '@lingo-reader/epub-parser';
 import { createFileRoute } from '@tanstack/react-router';
-import { BookOpen, ChevronRight, LoaderCircle, Upload } from 'lucide-react';
 import {
-	startTransition,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
+  BookOpen,
+  FileText,
+  Hash,
+  LoaderCircle,
+  Section,
+  Upload,
+} from 'lucide-react';
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,164 +32,164 @@ export const Route = createFileRoute('/epub')({ component: EpubReaderPage });
 
 /** One spine row when the book has no usable NCX / nav tree. */
 type SpineListItem = {
-	kind: 'spine';
-	id: string;
-	label: string;
+  kind: 'spine';
+  id: string;
+  label: string;
 };
 
 /** One TOC row resolved to a loadable manifest id. */
 type TocListItem = {
-	kind: 'toc';
-	id: string;
-	navId: string;
-	playOrder: string;
-	label: string;
-	selector: string;
-	depth: number;
+  kind: 'toc';
+  id: string;
+  navId: string;
+  playOrder: string;
+  label: string;
+  selector: string;
+  depth: number;
 };
 
 type ChapterListItem = SpineListItem | TocListItem;
 
 type ReaderTheme = {
-	background: string;
-	foreground: string;
-	mutedForeground: string;
-	border: string;
-	fontFamily: string;
-	colorScheme: 'light' | 'dark';
+  background: string;
+  foreground: string;
+  mutedForeground: string;
+  border: string;
+  fontFamily: string;
+  colorScheme: 'light' | 'dark';
 };
 
 const DEFAULT_READER_THEME: ReaderTheme = {
-	background: 'oklch(1 0 0)',
-	foreground: 'oklch(0.147 0.004 49.3)',
-	mutedForeground: 'oklch(0.547 0.021 43.1)',
-	border: 'oklch(0.922 0.005 34.3)',
-	fontFamily: '"Geist Variable", sans-serif',
-	colorScheme: 'light',
+  background: 'oklch(1 0 0)',
+  foreground: 'oklch(0.147 0.004 49.3)',
+  mutedForeground: 'oklch(0.547 0.021 43.1)',
+  border: 'oklch(0.922 0.005 34.3)',
+  fontFamily: '"Geist Variable", sans-serif',
+  colorScheme: 'light',
 };
 
 /**
  * Flattens NCX nav points into rows with manifest ids for `loadChapter`.
  */
 function flattenNavPoints(
-	points: NavPoint[],
-	epub: EpubFile,
-	depth: number,
+  points: NavPoint[],
+  epub: EpubFile,
+  depth: number,
 ): TocListItem[] {
-	const rows: TocListItem[] = [];
-	for (const point of points) {
-		const resolved = epub.resolveHref(point.href);
-		if (resolved) {
-			rows.push({
-				kind: 'toc',
-				id: resolved.id,
-				navId: point.id,
-				playOrder: point.playOrder,
-				label: point.label,
-				selector: resolved.selector,
-				depth,
-			});
-		}
-		if (point.children?.length) {
-			rows.push(...flattenNavPoints(point.children, epub, depth + 1));
-		}
-	}
-	return rows;
+  const rows: TocListItem[] = [];
+  for (const point of points) {
+    const resolved = epub.resolveHref(point.href);
+    if (resolved) {
+      rows.push({
+        kind: 'toc',
+        id: resolved.id,
+        navId: point.id,
+        playOrder: point.playOrder,
+        label: point.label,
+        selector: resolved.selector,
+        depth,
+      });
+    }
+    if (point.children?.length) {
+      rows.push(...flattenNavPoints(point.children, epub, depth + 1));
+    }
+  }
+  return rows;
 }
 
 function buildChapterList(epub: EpubFile): ChapterListItem[] {
-	const tocRows = flattenNavPoints(epub.getToc(), epub, 0);
-	if (tocRows.length > 0) {
-		return tocRows;
-	}
-	const spine = epub.getSpine();
-	return spine.map((item) => ({
-		kind: 'spine',
-		id: item.id,
-		label: item.href.split('/').pop() ?? item.id,
-	}));
+  const tocRows = flattenNavPoints(epub.getToc(), epub, 0);
+  if (tocRows.length > 0) {
+    return tocRows;
+  }
+  const spine = epub.getSpine();
+  return spine.map((item) => ({
+    kind: 'spine',
+    id: item.id,
+    label: item.href.split('/').pop() ?? item.id,
+  }));
 }
 
 function chapterListItemKey(item: ChapterListItem): string {
-	return item.kind === 'toc'
-		? `toc-${item.navId}-${item.playOrder}-${item.id}-${item.selector}`
-		: `spine-${item.id}`;
+  return item.kind === 'toc'
+    ? `toc-${item.navId}-${item.playOrder}-${item.id}-${item.selector}`
+    : `spine-${item.id}`;
 }
 
 function readCssVariable(styles: CSSStyleDeclaration, name: string): string {
-	return styles.getPropertyValue(name).trim();
+  return styles.getPropertyValue(name).trim();
 }
 
 function readReaderTheme(): ReaderTheme {
-	if (typeof window === 'undefined') {
-		return DEFAULT_READER_THEME;
-	}
+  if (typeof window === 'undefined') {
+    return DEFAULT_READER_THEME;
+  }
 
-	const root = document.documentElement;
-	const styles = window.getComputedStyle(root);
-	const isDark =
-		root.classList.contains('dark') || styles.colorScheme === 'dark';
+  const root = document.documentElement;
+  const styles = window.getComputedStyle(root);
+  const isDark =
+    root.classList.contains('dark') || styles.colorScheme === 'dark';
 
-	return {
-		background:
-			readCssVariable(styles, '--background') ||
-			DEFAULT_READER_THEME.background,
-		foreground:
-			readCssVariable(styles, '--foreground') ||
-			DEFAULT_READER_THEME.foreground,
-		mutedForeground:
-			readCssVariable(styles, '--muted-foreground') ||
-			DEFAULT_READER_THEME.mutedForeground,
-		border: readCssVariable(styles, '--border') || DEFAULT_READER_THEME.border,
-		fontFamily: styles.fontFamily || DEFAULT_READER_THEME.fontFamily,
-		colorScheme: isDark ? 'dark' : 'light',
-	};
+  return {
+    background:
+      readCssVariable(styles, '--background') ||
+      DEFAULT_READER_THEME.background,
+    foreground:
+      readCssVariable(styles, '--foreground') ||
+      DEFAULT_READER_THEME.foreground,
+    mutedForeground:
+      readCssVariable(styles, '--muted-foreground') ||
+      DEFAULT_READER_THEME.mutedForeground,
+    border: readCssVariable(styles, '--border') || DEFAULT_READER_THEME.border,
+    fontFamily: styles.fontFamily || DEFAULT_READER_THEME.fontFamily,
+    colorScheme: isDark ? 'dark' : 'light',
+  };
 }
 
 function sameReaderTheme(a: ReaderTheme, b: ReaderTheme): boolean {
-	return (
-		a.background === b.background &&
-		a.foreground === b.foreground &&
-		a.mutedForeground === b.mutedForeground &&
-		a.border === b.border &&
-		a.fontFamily === b.fontFamily &&
-		a.colorScheme === b.colorScheme
-	);
+  return (
+    a.background === b.background &&
+    a.foreground === b.foreground &&
+    a.mutedForeground === b.mutedForeground &&
+    a.border === b.border &&
+    a.fontFamily === b.fontFamily &&
+    a.colorScheme === b.colorScheme
+  );
 }
 
 function useReaderTheme(): ReaderTheme {
-	const [theme, setTheme] = useState(readReaderTheme);
+  const [theme, setTheme] = useState(readReaderTheme);
 
-	useEffect(() => {
-		const syncTheme = () => {
-			setTheme((current) => {
-				const next = readReaderTheme();
-				return sameReaderTheme(current, next) ? current : next;
-			});
-		};
+  useEffect(() => {
+    const syncTheme = () => {
+      setTheme((current) => {
+        const next = readReaderTheme();
+        return sameReaderTheme(current, next) ? current : next;
+      });
+    };
 
-		syncTheme();
+    syncTheme();
 
-		const observer = new MutationObserver(syncTheme);
-		observer.observe(document.documentElement, {
-			attributes: true,
-			attributeFilter: ['class', 'style', 'data-theme'],
-		});
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-theme'],
+    });
 
-		const media = window.matchMedia('(prefers-color-scheme: dark)');
-		media.addEventListener('change', syncTheme);
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    media.addEventListener('change', syncTheme);
 
-		return () => {
-			observer.disconnect();
-			media.removeEventListener('change', syncTheme);
-		};
-	}, []);
+    return () => {
+      observer.disconnect();
+      media.removeEventListener('change', syncTheme);
+    };
+  }, []);
 
-	return theme;
+  return theme;
 }
 
 function readerThemeCss(theme: ReaderTheme): string {
-	return `:root {
+  return `:root {
 	--epub-reader-background: ${theme.background};
 	--epub-reader-foreground: ${theme.foreground};
 	--epub-reader-muted-foreground: ${theme.mutedForeground};
@@ -208,11 +215,11 @@ body {
 }
 
 function readerCriticalStyle(theme: ReaderTheme): string {
-	return `<style>${readerThemeCss(theme)}</style>`;
+  return `<style>${readerThemeCss(theme)}</style>`;
 }
 
 function readerDocumentStyle(theme: ReaderTheme): string {
-	return `<style>
+  return `<style>
 @font-face {
 	font-display: swap;
 	font-family: "Geist Variable";
@@ -334,280 +341,288 @@ a {
 }
 
 function emptyReaderDocument(theme: ReaderTheme): string {
-	return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>${readerDocumentStyle(theme)}</head><body></body></html>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>${readerDocumentStyle(theme)}</head><body></body></html>`;
 }
 
 function chapterDocument(
-	chapter: EpubProcessedChapter,
-	theme: ReaderTheme,
+  chapter: EpubProcessedChapter,
+  theme: ReaderTheme,
 ): string {
-	const links = chapter.css
-		.map(
-			(part) => `<link rel="stylesheet" href=${JSON.stringify(part.href)} />`,
-		)
-		.join('');
-	return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>${readerCriticalStyle(theme)}${links}${readerDocumentStyle(theme)}</head><body>${chapter.html}</body></html>`;
+  const links = chapter.css
+    .map(
+      (part) => `<link rel="stylesheet" href=${JSON.stringify(part.href)} />`,
+    )
+    .join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>${readerCriticalStyle(theme)}${links}${readerDocumentStyle(theme)}</head><body>${chapter.html}</body></html>`;
 }
 
 function EpubReaderPage() {
-	const fileInputRef = useRef<HTMLInputElement>(null);
-	const iframeRef = useRef<HTMLIFrameElement>(null);
-	const epubRef = useRef<EpubFile | null>(null);
-	const loadedChapterIdRef = useRef<string | null>(null);
-	const readerTheme = useReaderTheme();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const epubRef = useRef<EpubFile | null>(null);
+  const loadedChapterIdRef = useRef<string | null>(null);
+  const readerTheme = useReaderTheme();
 
-	const [bookTitle, setBookTitle] = useState('');
-	const [chapters, setChapters] = useState<ChapterListItem[]>([]);
-	const [activeChapter, setActiveChapter] = useState<{
-		id: string;
-		chapter: EpubProcessedChapter;
-		scrollSelector: string;
-		scrollRequestId: number;
-	} | null>(null);
-	const [isBusy, setIsBusy] = useState(false);
-	const [error, setError] = useState('');
-	const readerSrcDoc = useMemo(
-		() =>
-			activeChapter
-				? chapterDocument(activeChapter.chapter, readerTheme)
-				: emptyReaderDocument(readerTheme),
-		[activeChapter, readerTheme],
-	);
+  const [bookTitle, setBookTitle] = useState('');
+  const [chapters, setChapters] = useState<ChapterListItem[]>([]);
+  const [activeChapter, setActiveChapter] = useState<{
+    id: string;
+    chapter: EpubProcessedChapter;
+    scrollSelector: string;
+    scrollRequestId: number;
+  } | null>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState('');
+  const readerSrcDoc = useMemo(
+    () =>
+      activeChapter
+        ? chapterDocument(activeChapter.chapter, readerTheme)
+        : emptyReaderDocument(readerTheme),
+    [activeChapter, readerTheme],
+  );
 
-	const disposeEpub = useCallback(() => {
-		const current = epubRef.current;
-		if (current) {
-			current.destroy();
-			epubRef.current = null;
-		}
-		loadedChapterIdRef.current = null;
-		setChapters([]);
-		setActiveChapter(null);
-		setBookTitle('');
-	}, []);
+  const disposeEpub = useCallback(() => {
+    const current = epubRef.current;
+    if (current) {
+      current.destroy();
+      epubRef.current = null;
+    }
+    loadedChapterIdRef.current = null;
+    setChapters([]);
+    setActiveChapter(null);
+    setBookTitle('');
+  }, []);
 
-	useEffect(() => {
-		return () => {
-			disposeEpub();
-		};
-	}, [disposeEpub]);
+  useEffect(() => {
+    return () => {
+      disposeEpub();
+    };
+  }, [disposeEpub]);
 
-	const scrollIframeToSelector = useCallback((selector: string) => {
-		const doc = iframeRef.current?.contentDocument;
-		if (!doc) {
-			return;
-		}
-		if (!selector) {
-			doc.defaultView?.scrollTo({ behavior: 'smooth', top: 0 });
-			return;
-		}
-		const target = doc.querySelector(selector);
-		target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-	}, []);
+  const scrollIframeToSelector = useCallback((selector: string) => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) {
+      return;
+    }
+    if (!selector) {
+      doc.defaultView?.scrollTo({ behavior: 'smooth', top: 0 });
+      return;
+    }
+    const target = doc.querySelector(selector);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
-	useEffect(() => {
-		if (!activeChapter || loadedChapterIdRef.current !== activeChapter.id) {
-			return;
-		}
-		scrollIframeToSelector(activeChapter.scrollSelector);
-	}, [activeChapter, scrollIframeToSelector]);
+  useEffect(() => {
+    if (!activeChapter || loadedChapterIdRef.current !== activeChapter.id) {
+      return;
+    }
+    scrollIframeToSelector(activeChapter.scrollSelector);
+  }, [activeChapter, scrollIframeToSelector]);
 
-	const openChapter = useCallback(
-		async (epub: EpubFile, id: string, scrollSelector: string) => {
-			const processed = await epub.loadChapter(id);
-			startTransition(() => {
-				setActiveChapter((current) => ({
-					id,
-					chapter: processed,
-					scrollSelector,
-					scrollRequestId: (current?.scrollRequestId ?? 0) + 1,
-				}));
-			});
-		},
-		[],
-	);
+  const openChapter = useCallback(
+    async (epub: EpubFile, id: string, scrollSelector: string) => {
+      const processed = await epub.loadChapter(id);
+      startTransition(() => {
+        setActiveChapter((current) => ({
+          id,
+          chapter: processed,
+          scrollSelector,
+          scrollRequestId: (current?.scrollRequestId ?? 0) + 1,
+        }));
+      });
+    },
+    [],
+  );
 
-	const handleFileChange = async (file: File | undefined) => {
-		if (!file) {
-			return;
-		}
-		setError('');
-		setIsBusy(true);
-		disposeEpub();
-		try {
-			const epub = await initEpubFile(file);
-			epubRef.current = epub;
-			const meta = epub.getMetadata();
-			setBookTitle(meta.title || file.name);
-			const list = buildChapterList(epub);
-			setChapters(list);
-			const first = list[0];
-			if (first) {
-				const selector = first.kind === 'toc' ? first.selector : '';
-				await openChapter(epub, first.id, selector);
-			}
-		} catch (caught) {
-			const message = caught instanceof Error ? caught.message : String(caught);
-			setError(message);
-		} finally {
-			setIsBusy(false);
-		}
-	};
+  const handleFileChange = async (file: File | undefined) => {
+    if (!file) {
+      return;
+    }
+    setError('');
+    setIsBusy(true);
+    disposeEpub();
+    try {
+      const epub = await initEpubFile(file);
+      epubRef.current = epub;
+      const meta = epub.getMetadata();
+      setBookTitle(meta.title || file.name);
+      const list = buildChapterList(epub);
+      setChapters(list);
+      const first = list[0];
+      if (first) {
+        const selector = first.kind === 'toc' ? first.selector : '';
+        await openChapter(epub, first.id, selector);
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setError(message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
 
-	const onPickChapter = async (item: ChapterListItem) => {
-		const epub = epubRef.current;
-		if (!epub) {
-			return;
-		}
-		setError('');
-		const selector = item.kind === 'toc' ? item.selector : '';
-		if (activeChapter?.id === item.id) {
-			setActiveChapter((current) =>
-				current
-					? {
-							...current,
-							scrollSelector: selector,
-							scrollRequestId: current.scrollRequestId + 1,
-						}
-					: current,
-			);
-			return;
-		}
-		setIsBusy(true);
-		try {
-			await openChapter(epub, item.id, selector);
-		} catch (caught) {
-			const message = caught instanceof Error ? caught.message : String(caught);
-			setError(message);
-		} finally {
-			setIsBusy(false);
-		}
-	};
+  const onPickChapter = async (item: ChapterListItem) => {
+    const epub = epubRef.current;
+    if (!epub) {
+      return;
+    }
+    setError('');
+    const selector = item.kind === 'toc' ? item.selector : '';
+    if (activeChapter?.id === item.id) {
+      setActiveChapter((current) =>
+        current
+          ? {
+              ...current,
+              scrollSelector: selector,
+              scrollRequestId: current.scrollRequestId + 1,
+            }
+          : current,
+      );
+      return;
+    }
+    setIsBusy(true);
+    try {
+      await openChapter(epub, item.id, selector);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setError(message);
+    } finally {
+      setIsBusy(false);
+    }
+  };
 
-	return (
-		<main className="min-h-[calc(100vh-4.5rem)] p-4 md:p-6">
-			<div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-				<div className="pb-2">
-					<div className="space-y-1">
-						<h1 className="font-semibold text-2xl tracking-tight">
-							EPUB reader
-						</h1>
-						<p className="max-w-2xl text-muted-foreground text-sm">
-							Open an EPUB, browse the table of contents, and read chapters
-							inline.
-						</p>
-					</div>
-				</div>
+  return (
+    <main className='min-h-[calc(100vh-4.5rem)] p-4 md:p-6'>
+      <div className='mx-auto flex w-full max-w-6xl flex-col gap-4'>
+        <div className='pb-2'>
+          <div className='space-y-1'>
+            <h1 className='font-semibold text-2xl tracking-tight'>
+              EPUB reader
+            </h1>
+            <p className='max-w-2xl text-muted-foreground text-sm'>
+              Open an EPUB, browse the table of contents, and read chapters
+              inline.
+            </p>
+          </div>
+        </div>
 
-				<div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
-					<Card className="min-w-0 shadow-sm backdrop-blur lg:self-start">
-						<CardHeader className="space-y-1">
-							<CardTitle className="flex items-center gap-2 text-base">
-								<BookOpen className="size-4 text-muted-foreground" />
-								Library
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="grid gap-4 pt-4">
-							<input
-								ref={fileInputRef}
-								type="file"
-								accept=".epub,application/epub+zip"
-								className="sr-only"
-								aria-label="Choose EPUB file"
-								onChange={(event) => {
-									const next = event.target.files?.[0];
-									void handleFileChange(next);
-									event.target.value = '';
-								}}
-							/>
-							<div className="space-y-2">
-								<Label htmlFor="epub-file-trigger">EPUB file</Label>
-								<Button
-									id="epub-file-trigger"
-									type="button"
-									variant="secondary"
-									className="w-full"
-									disabled={isBusy}
-									onClick={() => fileInputRef.current?.click()}
-								>
-									{isBusy ? (
-										<LoaderCircle className="size-4 animate-spin" />
-									) : (
-										<Upload className="size-4" />
-									)}
-									Choose file…
-								</Button>
-							</div>
+        <div className='grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]'>
+          <Card className='min-w-0 shadow-sm backdrop-blur lg:self-start'>
+            <CardHeader className='space-y-1'>
+              <CardTitle className='flex items-center gap-2 text-base'>
+                <BookOpen className='size-4 text-muted-foreground' />
+                Library
+              </CardTitle>
+            </CardHeader>
+            <CardContent className='grid gap-4 pt-4'>
+              <input
+                ref={fileInputRef}
+                type='file'
+                accept='.epub,application/epub+zip'
+                className='sr-only'
+                aria-label='Choose EPUB file'
+                onChange={(event) => {
+                  const next = event.target.files?.[0];
+                  void handleFileChange(next);
+                  event.target.value = '';
+                }}
+              />
+              <div className='space-y-2'>
+                <Label htmlFor='epub-file-trigger'>EPUB file</Label>
+                <Button
+                  id='epub-file-trigger'
+                  type='button'
+                  variant='secondary'
+                  className='w-full'
+                  disabled={isBusy}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {isBusy ? (
+                    <LoaderCircle className='size-4 animate-spin' />
+                  ) : (
+                    <Upload className='size-4' />
+                  )}
+                  Choose file…
+                </Button>
+              </div>
 
-							{bookTitle ? (
-								<p className="font-medium text-sm leading-snug">{bookTitle}</p>
-							) : null}
+              {bookTitle ? (
+                <p className='font-medium text-sm leading-snug'>{bookTitle}</p>
+              ) : null}
 
-							{error ? (
-								<div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
-									{error}
-								</div>
-							) : null}
+              {error ? (
+                <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm'>
+                  {error}
+                </div>
+              ) : null}
 
-							<div className="max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]">
-								{chapters.length === 0 ? (
-									<p className="p-3 text-muted-foreground text-sm">
-										No chapters yet. Choose an EPUB to list its spine or table
-										of contents.
-									</p>
-								) : (
-									<ul className="divide-y">
-										{chapters.map((item) => (
-											<li key={chapterListItemKey(item)}>
-												<button
-													type="button"
-													className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60"
-													style={{
-														paddingLeft:
-															item.kind === 'toc'
-																? `${12 + item.depth * 12}px`
-																: undefined,
-													}}
-													onClick={() => {
-														void onPickChapter(item);
-													}}
-												>
-													<ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-													<span className="leading-snug">{item.label}</span>
-												</button>
-											</li>
-										))}
-									</ul>
-								)}
-							</div>
-						</CardContent>
-					</Card>
+              <div className='max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]'>
+                {chapters.length === 0 ? (
+                  <p className='p-3 text-muted-foreground text-sm'>
+                    No chapters yet. Choose an EPUB to list its spine or table
+                    of contents.
+                  </p>
+                ) : (
+                  <ul className='divide-y'>
+                    {chapters.map((item) => {
+                      const isInCurrentChapter = activeChapter?.id === item.id;
+                      const ItemIcon = isInCurrentChapter ? Section : FileText;
 
-					<Card className="min-w-0 border-border/70 shadow-sm backdrop-blur">
-						<CardHeader>
-							<CardTitle className="text-base">Reading pane</CardTitle>
-						</CardHeader>
-						<CardContent className="min-w-0">
-							<div className="overflow-hidden rounded-lg border">
-								<iframe
-									ref={iframeRef}
-									title="EPUB chapter"
-									className="h-[clamp(260px,62dvh,640px)] w-full border-0 bg-background lg:h-[clamp(260px,70dvh,640px)]"
-									sandbox="allow-same-origin"
-									srcDoc={readerSrcDoc}
-									style={{ colorScheme: readerTheme.colorScheme }}
-									onLoad={() => {
-										if (activeChapter) {
-											loadedChapterIdRef.current = activeChapter.id;
-											scrollIframeToSelector(activeChapter.scrollSelector);
-										}
-									}}
-								/>
-							</div>
-						</CardContent>
-					</Card>
-				</div>
-			</div>
-		</main>
-	);
+                      return (
+                        <li key={chapterListItemKey(item)}>
+                          <button
+                            type='button'
+                            className='flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60'
+                            style={{
+                              paddingLeft:
+                                item.kind === 'toc'
+                                  ? `${12 + item.depth * 12}px`
+                                  : undefined,
+                            }}
+                            onClick={() => {
+                              void onPickChapter(item);
+                            }}
+                          >
+                            <ItemIcon
+                              className='mt-0.5 size-4 shrink-0 text-muted-foreground'
+                              aria-hidden='true'
+                            />
+                            <span className='leading-snug'>{item.label}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className='min-w-0 border-border/70 shadow-sm backdrop-blur'>
+            <CardHeader>
+              <CardTitle className='text-base'>Reading pane</CardTitle>
+            </CardHeader>
+            <CardContent className='min-w-0'>
+              <div className='overflow-hidden rounded-lg border'>
+                <iframe
+                  ref={iframeRef}
+                  title='EPUB chapter'
+                  className='h-[clamp(260px,62dvh,640px)] w-full border-0 bg-background lg:h-[clamp(260px,70dvh,640px)]'
+                  sandbox='allow-same-origin'
+                  srcDoc={readerSrcDoc}
+                  style={{ colorScheme: readerTheme.colorScheme }}
+                  onLoad={() => {
+                    if (activeChapter) {
+                      loadedChapterIdRef.current = activeChapter.id;
+                      scrollIframeToSelector(activeChapter.scrollSelector);
+                    }
+                  }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </main>
+  );
 }
