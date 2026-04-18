@@ -123,21 +123,6 @@ See [cli/README.md](cli/README.md) for the full CLI reference, Docker usage, str
 
 ## Desktop Builds
 
-Build a local production app bundle:
-
-```bash
-cd app
-bun install
-bun run build:tauri
-```
-
-Create a release build with the project release helper:
-
-```bash
-cd app
-bun run release:tauri
-```
-
 If macOS blocks the app from opening, you may need to run this command:
 
 ```bash
