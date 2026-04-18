@@ -59,6 +59,7 @@ struct AppUpdateResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 enum AppUpdateStatus {
+    Available,
     UpToDate,
     Restarting,
 }
@@ -196,6 +197,28 @@ async fn synthesize_speech(
         saved_output_path,
         saved_timestamps_path,
         timestamps,
+    })
+}
+
+#[tauri::command]
+async fn check_app_update(app: AppHandle) -> Result<AppUpdateResponse, String> {
+    let update = app
+        .updater()
+        .map_err(|error| format!("Failed to initialize updater: {error}"))?
+        .check()
+        .await
+        .map_err(|error| format!("Failed to check for updates: {error}"))?;
+
+    let Some(update) = update else {
+        return Ok(AppUpdateResponse {
+            status: AppUpdateStatus::UpToDate,
+            version: None,
+        });
+    };
+
+    Ok(AppUpdateResponse {
+        status: AppUpdateStatus::Available,
+        version: Some(update.version),
     })
 }
 
@@ -449,6 +472,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             synthesize_speech,
+            check_app_update,
             install_app_update
         ])
         .setup(|app| {

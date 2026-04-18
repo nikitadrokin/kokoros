@@ -44,93 +44,93 @@ export default function Header() {
 
   return (
     <header className='sticky top-0 z-50 border-b bg-background/90 px-4 backdrop-blur supports-backdrop-filter:bg-background/70'>
-      <div className='mx-auto flex min-h-14 w-full items-center gap-3 py-2'>
-        <Link
-          to='/'
-          className='inline-flex shrink-0 items-center gap-2 rounded-full px-2 py-1.5 font-semibold text-foreground text-sm tracking-tight no-underline transition-colors hover:text-primary focus-visible:outline-1 focus-visible:ring-3 focus-visible:ring-ring/30'
-          aria-label='Go to Kokoros speech playground'
-        >
-          <span className='grid size-7 place-items-center rounded-full border bg-card text-primary shadow-sm'>
-            <AudioLinesIcon className='size-4' aria-hidden='true' />
-          </span>
-          <span className='hidden sm:inline'>Kokoros</span>
-        </Link>
+      <NavigationMenu className='min-w-full flex-1 justify-start' align='start'>
+        <NavigationMenuList className='justify-start gap-1 overflow-x-auto py-2 w-full '>
+          <Link
+            to='/'
+            className='inline-flex shrink-0 items-center gap-2 rounded-full px-2 py-1.5 font-semibold text-foreground text-sm tracking-tight no-underline transition-colors hover:text-primary focus-visible:outline-1 focus-visible:ring-3 focus-visible:ring-ring/30'
+            aria-label='Go to Kokoros speech playground'
+          >
+            <span className='grid size-7 place-items-center rounded-full border bg-card text-primary shadow-sm'>
+              <AudioLinesIcon className='size-4' aria-hidden='true' />
+            </span>
+            <span className='hidden sm:inline'>Kokoros</span>
+          </Link>
 
-        <NavigationMenu className='min-w-0 flex-1 justify-start' align='start'>
-          <NavigationMenuList className='justify-start gap-1 overflow-x-auto'>
-            <NavigationMenuItem>
-              <NavigationMenuTrigger
-                className={cn(
-                  'h-9 gap-1.5 whitespace-nowrap rounded-full px-3 py-2 font-medium',
-                  isSpeechActive && 'bg-muted text-foreground',
-                )}
-                aria-label='Speech tools'
-              >
-                <AudioLinesIcon
-                  className='size-4 text-muted-foreground'
-                  aria-hidden='true'
-                />
-                <span>Speech</span>
-              </NavigationMenuTrigger>
-              <NavigationMenuContent className='w-[min(28rem,calc(100vw-2rem))]'>
-                <div className='grid gap-1'>
-                  {speechItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = pathname === item.to;
+          <NavigationMenuItem>
+            <NavigationMenuTrigger
+              className={cn(
+                'h-9 gap-1.5 whitespace-nowrap rounded-full px-3 py-2 font-medium',
+                isSpeechActive && 'bg-muted text-foreground',
+              )}
+              aria-label='Speech tools'
+            >
+              <AudioLinesIcon
+                className='size-4 text-muted-foreground'
+                aria-hidden='true'
+              />
+              <span>Speech</span>
+            </NavigationMenuTrigger>
+            <NavigationMenuContent className='w-[min(28rem,calc(100vw-2rem))]'>
+              <div className='grid gap-1'>
+                {speechItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.to;
 
-                    return (
-                      <NavigationMenuLink
-                        key={item.to}
-                        active={isActive}
-                        render={<Link to={item.to} />}
-                        className='grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 rounded-2xl px-3 py-3'
-                        aria-label={item.description}
-                      >
-                        <Icon
-                          className='mt-0.5 size-4 text-muted-foreground'
-                          aria-hidden='true'
-                        />
-                        <span className='font-medium'>{item.label}</span>
-                        <span className='col-start-2 text-muted-foreground text-xs leading-5'>
-                          {item.description}
-                        </span>
-                      </NavigationMenuLink>
-                    );
-                  })}
-                </div>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
+                  return (
+                    <NavigationMenuLink
+                      key={item.to}
+                      active={isActive}
+                      render={<Link to={item.to} />}
+                      className='grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 rounded-2xl px-3 py-3'
+                      aria-label={item.description}
+                    >
+                      <Icon
+                        className='mt-0.5 size-4 text-muted-foreground'
+                        aria-hidden='true'
+                      />
+                      <span className='font-medium'>{item.label}</span>
+                      <span className='col-start-2 text-muted-foreground text-xs leading-5'>
+                        {item.description}
+                      </span>
+                    </NavigationMenuLink>
+                  );
+                })}
+              </div>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
 
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.to;
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.to;
 
-              return (
-                <NavigationMenuItem key={item.to}>
-                  <NavigationMenuLink
-                    active={isActive}
-                    render={<Link to={item.to} />}
-                    className={cn(
-                      'h-9 whitespace-nowrap rounded-full px-3 py-2 font-medium',
-                      'data-[active=true]:bg-muted data-[active=true]:text-foreground',
-                    )}
-                    aria-label={item.description}
-                  >
-                    <Icon
-                      className='size-4 text-muted-foreground'
-                      aria-hidden='true'
-                    />
-                    <span>{item.label}</span>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
-              );
-            })}
-          </NavigationMenuList>
-        </NavigationMenu>
+            return (
+              <NavigationMenuItem key={item.to}>
+                <NavigationMenuLink
+                  active={isActive}
+                  render={<Link to={item.to} />}
+                  className={cn(
+                    'h-9 whitespace-nowrap rounded-full px-3 py-2 font-medium',
+                    'data-[active=true]:bg-muted data-[active=true]:text-foreground',
+                  )}
+                  aria-label={item.description}
+                >
+                  <Icon
+                    className='size-4 text-muted-foreground'
+                    aria-hidden='true'
+                  />
+                  <span>{item.label}</span>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            );
+          })}
 
-        <UpdateButton />
-        <ThemeToggle />
-      </div>
+          <div className='ml-auto flex items-center gap-2'>
+            <UpdateButton />
+            <ThemeToggle />
+          </div>
+        </NavigationMenuList>
+      </NavigationMenu>
     </header>
   );
 }
