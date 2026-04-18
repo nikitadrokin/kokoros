@@ -11,7 +11,6 @@ import { createFileRoute } from '@tanstack/react-router';
 import {
   BookOpen,
   FileText,
-  Hash,
   LoaderCircle,
   Section,
   Upload,

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { AudioLinesIcon, FileAudio, LoaderCircle, Play } from 'lucide-react';
 import { startTransition, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 export const Route = createFileRoute('/')({ component: PlaygroundPage });
@@ -24,7 +25,7 @@ const VOICE_OPTIONS = [
 ];
 
 type SynthesizeSpeechResponse = {
-	audioBase64: string;
+	audioBase64: string | null;
 	sampleRate: number;
 	savedOutputPath: string | null;
 	savedTimestampsPath: string | null;
@@ -37,6 +38,12 @@ const base64ToBlobUrl = (base64: string) => {
 	return URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
 };
 
+const revokeBlobUrl = (url: string) => {
+	if (url.startsWith('blob:')) {
+		URL.revokeObjectURL(url);
+	}
+};
+
 function PlaygroundPage() {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const [text, setText] = useState(
@@ -44,13 +51,15 @@ function PlaygroundPage() {
 	);
 	const [style, setStyle] = useState('af_heart');
 	const [audioUrl, setAudioUrl] = useState('');
+	const [saveToDisk, setSaveToDisk] = useState(true);
+	const [savedOutputPath, setSavedOutputPath] = useState('');
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [error, setError] = useState('');
 
 	useEffect(() => {
 		return () => {
 			if (audioUrl) {
-				URL.revokeObjectURL(audioUrl);
+				revokeBlobUrl(audioUrl);
 			}
 		};
 	}, [audioUrl]);
@@ -70,18 +79,28 @@ function PlaygroundPage() {
 					request: {
 						text,
 						style,
+						saveToDisk,
 						mono: false,
 						timestamps: false,
 					},
 				},
 			);
 
-			const nextUrl = base64ToBlobUrl(response.audioBase64);
+			const nextUrl = response.savedOutputPath
+				? convertFileSrc(response.savedOutputPath)
+				: response.audioBase64
+					? base64ToBlobUrl(response.audioBase64)
+					: '';
+
+			if (!nextUrl) {
+				throw new Error('No generated audio was returned.');
+			}
 
 			startTransition(() => {
+				setSavedOutputPath(response.savedOutputPath ?? '');
 				setAudioUrl((currentUrl) => {
 					if (currentUrl) {
-						URL.revokeObjectURL(currentUrl);
+						revokeBlobUrl(currentUrl);
 					}
 					return nextUrl;
 				});
@@ -161,6 +180,16 @@ function PlaygroundPage() {
 								</Select>
 							</div>
 
+							<div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+								<Label htmlFor="save-to-disk">Save WAV to disk</Label>
+								<Switch
+									id="save-to-disk"
+									checked={saveToDisk}
+									onCheckedChange={setSaveToDisk}
+									aria-label="Save WAV to disk"
+								/>
+							</div>
+
 							{error ? (
 								<div className="rounded-lg bg-destructive/10 px-3 py-2 text-destructive text-sm">
 									{error}
@@ -191,6 +220,7 @@ function PlaygroundPage() {
 						</CardHeader>
 						<CardContent className="grid gap-3">
 							<div className="rounded-lg">
+								{/* biome-ignore lint/a11y/useMediaCaption: Generated speech previews do not have a caption track yet. */}
 								<audio
 									ref={audioRef}
 									controls
@@ -212,9 +242,11 @@ function PlaygroundPage() {
 							</Button>
 
 							<p className="text-muted-foreground text-sm">
-								{audioUrl
-									? 'Latest render is ready above.'
-									: 'Generate audio to preview it here.'}
+								{savedOutputPath
+									? `Saved to ${savedOutputPath}`
+									: audioUrl
+										? 'Latest render is ready above.'
+										: 'Generate audio to preview it here.'}
 							</p>
 						</CardContent>
 					</Card>

@@ -6,7 +6,7 @@ use kokoros::{
 use std::net::{IpAddr, SocketAddr};
 use std::{
     fs::{self},
-    io::Write,
+    io::{Seek, SeekFrom, Write},
     path::Path,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -148,6 +148,10 @@ struct Cli {
     #[arg(long = "timestamps", default_value_t = false, global = true)]
     timestamps: bool,
 
+    /// Write text/file output incrementally instead of collecting all samples before saving
+    #[arg(long = "stream-output", default_value_t = false)]
+    stream_output: bool,
+
     /// Number of TTS instances for parallel processing
     #[arg(long = "instances", value_name = "INSTANCES", default_value_t = 2)]
     instances: usize,
@@ -228,6 +232,109 @@ fn write_wav_file(
     Ok(())
 }
 
+fn write_wav_header<W: Write>(
+    writer: &mut W,
+    channels: u16,
+    sample_rate: u32,
+    bits_per_sample: u16,
+    data_size: u32,
+) -> std::io::Result<()> {
+    let block_align: u16 = channels * bits_per_sample / 8;
+    let byte_rate: u32 = sample_rate * (block_align as u32);
+    let riff_chunk_size: u32 = 36u32.saturating_add(data_size);
+
+    writer.write_all(b"RIFF")?;
+    writer.write_all(&riff_chunk_size.to_le_bytes())?;
+    writer.write_all(b"WAVE")?;
+    writer.write_all(b"fmt ")?;
+    writer.write_all(&(16u32).to_le_bytes())?;
+    writer.write_all(&(3u16).to_le_bytes())?;
+    writer.write_all(&channels.to_le_bytes())?;
+    writer.write_all(&sample_rate.to_le_bytes())?;
+    writer.write_all(&byte_rate.to_le_bytes())?;
+    writer.write_all(&block_align.to_le_bytes())?;
+    writer.write_all(&bits_per_sample.to_le_bytes())?;
+    writer.write_all(b"data")?;
+    writer.write_all(&data_size.to_le_bytes())?;
+
+    Ok(())
+}
+
+fn write_wav_samples<W: Write>(
+    writer: &mut W,
+    samples: &[f32],
+    mono: bool,
+) -> std::io::Result<u64> {
+    let mut bytes_written = 0u64;
+
+    if mono {
+        for &sample in samples {
+            writer.write_all(&sample.to_le_bytes())?;
+            bytes_written += 4;
+        }
+    } else {
+        for &sample in samples {
+            writer.write_all(&sample.to_le_bytes())?;
+            writer.write_all(&sample.to_le_bytes())?;
+            bytes_written += 8;
+        }
+    }
+
+    Ok(bytes_written)
+}
+
+fn finalize_wav_header(file: &mut fs::File, data_bytes: u64) -> std::io::Result<()> {
+    let data_size = u32::try_from(data_bytes).unwrap_or(u32::MAX);
+    let riff_chunk_size = 36u32.saturating_add(data_size);
+
+    file.seek(SeekFrom::Start(4))?;
+    file.write_all(&riff_chunk_size.to_le_bytes())?;
+    file.seek(SeekFrom::Start(40))?;
+    file.write_all(&data_size.to_le_bytes())?;
+    file.seek(SeekFrom::End(0))?;
+    file.flush()?;
+
+    Ok(())
+}
+
+fn write_streaming_wav_file(
+    tts: &TTSKoko,
+    path: &str,
+    text: &str,
+    lan: &str,
+    style: &str,
+    speed: f32,
+    initial_silence: Option<usize>,
+    mono: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut file = fs::File::create(path)?;
+    let channels: u16 = if mono { 1 } else { 2 };
+    write_wav_header(&mut file, channels, 24_000, 32, u32::MAX)?;
+    file.flush()?;
+
+    let mut data_bytes = 0u64;
+    tts.tts_raw_audio_streaming(
+        text,
+        lan,
+        style,
+        speed,
+        initial_silence,
+        None,
+        None,
+        None,
+        |audio| {
+            data_bytes += write_wav_samples(&mut file, &audio, mono)?;
+            file.flush()?;
+            Ok(())
+        },
+    )?;
+
+    finalize_wav_header(&mut file, data_bytes)?;
+    eprintln!("Audio saved to {}", path);
+
+    Ok(())
+}
+
 fn write_tsv(path: &str, alignments: &[(String, f32, f32)]) -> std::io::Result<()> {
     use std::fs::File;
     use std::io::Write;
@@ -263,6 +370,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             initial_silence,
             mono,
             timestamps,
+            stream_output,
             instances,
             mode,
         } = Cli::parse();
@@ -315,6 +423,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 eprintln!("Error processing line {}: {}", i + 1, e);
                             }
                         }
+                    } else if stream_output {
+                        write_streaming_wav_file(
+                            &tts,
+                            &save_path,
+                            stripped_line,
+                            &lan,
+                            &style,
+                            speed,
+                            initial_silence,
+                            mono,
+                        )?;
                     } else {
                         tts.tts(TTSOpts {
                             txt: stripped_line,
@@ -360,6 +479,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             eprintln!("Error processing input text: {}", e);
                         }
                     }
+                } else if stream_output {
+                    write_streaming_wav_file(
+                        &tts,
+                        &save_path,
+                        &text,
+                        &lan,
+                        &style,
+                        speed,
+                        initial_silence,
+                        mono,
+                    )?;
                 } else {
                     tts.tts(TTSOpts {
                         txt: &text,

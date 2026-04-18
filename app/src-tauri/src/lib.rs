@@ -27,6 +27,7 @@ struct SynthesizeSpeechRequest {
     model_path: Option<String>,
     data_path: Option<String>,
     output_path: Option<String>,
+    save_to_disk: Option<bool>,
     initial_silence: Option<usize>,
     mono: bool,
     timestamps: bool,
@@ -43,7 +44,7 @@ struct TimestampRow {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SynthesizeSpeechResponse {
-    audio_base64: String,
+    audio_base64: Option<String>,
     sample_rate: u32,
     saved_output_path: Option<String>,
     saved_timestamps_path: Option<String>,
@@ -103,6 +104,7 @@ async fn synthesize_speech(
     let speed = request.speed.unwrap_or(1.0);
     let timestamps_requested = request.timestamps;
     let mono = request.mono;
+    let save_to_disk = request.save_to_disk.unwrap_or(false);
 
     let model_path = resolve_input_or_resource(
         &app,
@@ -122,8 +124,11 @@ async fn synthesize_speech(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
+    let should_keep_output = requested_output_path.is_some() || save_to_disk;
     let output_path = if let Some(path) = requested_output_path {
         resolve_output_path(&app, path)?
+    } else if save_to_disk {
+        create_saved_output_path(&app)?
     } else {
         create_temp_output_path(&app)?
     };
@@ -175,12 +180,24 @@ async fn synthesize_speech(
         return Err(format_command_failure(&output));
     }
 
-    let wav_bytes = fs::read(&output_path).map_err(|error| {
-        format!(
-            "Failed to read generated audio: {error}. {}",
-            command_log(&output)
-        )
-    })?;
+    let audio_base64 = if should_keep_output {
+        if !output_path.exists() {
+            return Err(format!(
+                "koko completed but did not create `{}`. {}",
+                output_path.display(),
+                command_log(&output)
+            ));
+        }
+        None
+    } else {
+        let wav_bytes = fs::read(&output_path).map_err(|error| {
+            format!(
+                "Failed to read generated audio: {error}. {}",
+                command_log(&output)
+            )
+        })?;
+        Some(BASE64.encode(wav_bytes))
+    };
 
     let tsv_path = derive_tsv_path_from_wav(&output_path);
     let timestamps = if timestamps_requested {
@@ -189,14 +206,14 @@ async fn synthesize_speech(
         Vec::new()
     };
 
-    let saved_output_path = requested_output_path.map(|_| output_path.display().to_string());
-    let saved_timestamps_path = if timestamps_requested && requested_output_path.is_some() {
+    let saved_output_path = should_keep_output.then(|| output_path.display().to_string());
+    let saved_timestamps_path = if timestamps_requested && should_keep_output {
         Some(tsv_path.display().to_string())
     } else {
         None
     };
 
-    if requested_output_path.is_none() {
+    if !should_keep_output {
         let _ = fs::remove_file(&output_path);
         if timestamps_requested {
             let _ = fs::remove_file(&tsv_path);
@@ -204,7 +221,7 @@ async fn synthesize_speech(
     }
 
     Ok(SynthesizeSpeechResponse {
-        audio_base64: BASE64.encode(wav_bytes),
+        audio_base64,
         sample_rate: 24_000,
         saved_output_path,
         saved_timestamps_path,
@@ -394,6 +411,22 @@ fn create_temp_output_path(app: &AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_cache_dir()
         .unwrap_or_else(|_| std::env::temp_dir())
+        .join("synthesis");
+    fs::create_dir_all(&base_dir).map_err(|error| error.to_string())?;
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+
+    Ok(base_dir.join(format!("speech-{}-{timestamp}.wav", std::process::id())))
+}
+
+fn create_saved_output_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let base_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
         .join("synthesis");
     fs::create_dir_all(&base_dir).map_err(|error| error.to_string())?;
 
