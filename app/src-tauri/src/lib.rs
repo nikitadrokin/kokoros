@@ -8,6 +8,7 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::{process::Output, ShellExt};
+use tauri_plugin_updater::UpdaterExt;
 
 const KOKO_SIDECAR: &str = "koko";
 const MODEL_RESOURCE_PATH: &str = "models/kokoro-v1.0.onnx";
@@ -46,6 +47,20 @@ struct SynthesizeSpeechResponse {
     saved_output_path: Option<String>,
     saved_timestamps_path: Option<String>,
     timestamps: Vec<TimestampRow>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppUpdateResponse {
+    status: AppUpdateStatus,
+    version: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum AppUpdateStatus {
+    UpToDate,
+    Restarting,
 }
 
 #[tauri::command]
@@ -182,6 +197,94 @@ async fn synthesize_speech(
         saved_timestamps_path,
         timestamps,
     })
+}
+
+#[tauri::command]
+async fn install_app_update(app: AppHandle) -> Result<AppUpdateResponse, String> {
+    let update = app
+        .updater()
+        .map_err(|error| format!("Failed to initialize updater: {error}"))?
+        .check()
+        .await
+        .map_err(|error| format!("Failed to check for updates: {error}"))?;
+
+    let Some(update) = update else {
+        return Ok(AppUpdateResponse {
+            status: AppUpdateStatus::UpToDate,
+            version: None,
+        });
+    };
+
+    let version = update.version.clone();
+    let quarantine_target = app_quarantine_target()?;
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|error| format!("Failed to install update: {error}"))?;
+
+    clear_installed_app_quarantine(quarantine_target.as_deref())?;
+    app.request_restart();
+
+    Ok(AppUpdateResponse {
+        status: AppUpdateStatus::Restarting,
+        version: Some(version),
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn app_quarantine_target() -> Result<Option<PathBuf>, String> {
+    current_app_bundle_path().map(Some)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn app_quarantine_target() -> Result<Option<PathBuf>, String> {
+    Ok(None)
+}
+
+#[cfg(target_os = "macos")]
+fn clear_installed_app_quarantine(app_bundle: Option<&Path>) -> Result<(), String> {
+    let app_bundle = app_bundle.ok_or_else(|| "Missing app bundle path".to_string())?;
+    let output = std::process::Command::new("/usr/bin/xattr")
+        .args(["-cr"])
+        .arg(app_bundle)
+        .output()
+        .map_err(|error| format!("Failed to run xattr: {error}"))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(format!(
+            "Failed to clear quarantine on `{}`: {}",
+            app_bundle.display(),
+            if stderr.is_empty() {
+                "xattr exited without an error message".to_string()
+            } else {
+                stderr
+            }
+        ))
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn clear_installed_app_quarantine(_app_bundle: Option<&Path>) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn current_app_bundle_path() -> Result<PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|error| error.to_string())?;
+    let macos_dir = exe
+        .parent()
+        .ok_or_else(|| format!("Could not find parent directory for `{}`", exe.display()))?;
+    let contents_dir = macos_dir
+        .parent()
+        .ok_or_else(|| format!("Could not find Contents directory for `{}`", exe.display()))?;
+    let app_bundle = contents_dir
+        .parent()
+        .ok_or_else(|| format!("Could not find app bundle for `{}`", exe.display()))?;
+
+    Ok(app_bundle.to_path_buf())
 }
 
 fn resolve_input_or_resource(
@@ -343,7 +446,11 @@ fn command_log(output: &Output) -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![synthesize_speech])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            synthesize_speech,
+            install_app_update
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

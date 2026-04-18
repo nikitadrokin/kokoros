@@ -10,11 +10,17 @@
 
 import { Glob } from 'bun';
 import { stat } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import readline from 'node:readline/promises';
 
 type TauriConf = {
   version: string;
+  bundle?: {
+    createUpdaterArtifacts?: boolean | string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 };
 
 const GREEN = '\x1b[0;32m';
@@ -35,6 +41,12 @@ const tauriConfPath = join(projectRoot, 'src-tauri/tauri.conf.json');
 const packageJsonPath = join(projectRoot, 'package.json');
 const cargoTomlPath = join(projectRoot, 'src-tauri/Cargo.toml');
 const dmgDir = join(projectRoot, 'src-tauri/target/release/bundle/dmg');
+const macosBundleDir = join(projectRoot, 'src-tauri/target/release/bundle/macos');
+const latestUpdaterJsonPath = join(macosBundleDir, 'latest.json');
+const defaultUpdaterSigningKeyPath = join(
+  homedir(),
+  '.tauri/kokoros-updater.key',
+);
 
 // Homebrew support is intentionally disabled for now. To enable it later:
 // 1. Point this at the cask file in your tap.
@@ -124,10 +136,120 @@ async function findDmgForVersion(version: string): Promise<string | undefined> {
   return undefined;
 }
 
+async function findMacUpdaterArchive(): Promise<string | undefined> {
+  try {
+    const st = await stat(macosBundleDir);
+    if (!st.isDirectory()) {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  const matches: string[] = [];
+  const glob = new Glob('*.app.tar.gz');
+  for await (const rel of glob.scan({ cwd: macosBundleDir, onlyFiles: true })) {
+    matches.push(join(macosBundleDir, rel));
+  }
+
+  return matches.sort()[0];
+}
+
 // GitHub normalizes asset names by replacing spaces with dots. Kokoros does not
 // currently have spaces, but this keeps the Homebrew scaffolding future-proof.
-function githubReleaseDmgBasename(localBasename: string): string {
+function githubReleaseAssetBasename(localBasename: string): string {
   return localBasename.replace(/ /g, '.');
+}
+
+function githubReleaseDmgBasename(localBasename: string): string {
+  return githubReleaseAssetBasename(localBasename);
+}
+
+function updaterPlatformKeyFromDmg(dmgPath: string): string {
+  const match = basename(dmgPath).match(/_([^_]+)\.dmg$/);
+  const rawArch = match?.[1] ?? process.arch;
+  const arch =
+    rawArch === 'arm64' || rawArch === 'aarch64'
+      ? 'aarch64'
+      : rawArch === 'x64' || rawArch === 'amd64' || rawArch === 'x86_64'
+        ? 'x86_64'
+        : rawArch;
+
+  return `darwin-${arch}`;
+}
+
+async function writeLatestUpdaterJson(
+  version: string,
+  dmgPath: string,
+  updaterArchivePath: string,
+): Promise<string> {
+  const signaturePath = `${updaterArchivePath}.sig`;
+  if (!(await Bun.file(signaturePath).exists())) {
+    throw new Error(`Updater signature not found: ${signaturePath}`);
+  }
+
+  const signature = (await Bun.file(signaturePath).text()).trim();
+  const updaterAssetName = githubReleaseAssetBasename(basename(updaterArchivePath));
+  const platformKey = updaterPlatformKeyFromDmg(dmgPath);
+  const latestJson = {
+    version,
+    pub_date: new Date().toISOString(),
+    platforms: {
+      [platformKey]: {
+        signature,
+        url: `https://github.com/nikitadrokin/kokoros/releases/download/v${version}/${updaterAssetName}`,
+      },
+    },
+  };
+
+  await Bun.write(latestUpdaterJsonPath, `${JSON.stringify(latestJson, null, 2)}\n`);
+  return latestUpdaterJsonPath;
+}
+
+async function ensureUpdaterSigningKey(): Promise<void> {
+  if (process.env.TAURI_SIGNING_PRIVATE_KEY) {
+    return;
+  }
+
+  if (process.env.TAURI_SIGNING_PRIVATE_KEY_PATH) {
+    process.env.TAURI_SIGNING_PRIVATE_KEY = (
+      await Bun.file(process.env.TAURI_SIGNING_PRIVATE_KEY_PATH).text()
+    ).trim();
+    return;
+  }
+
+  if (await Bun.file(defaultUpdaterSigningKeyPath).exists()) {
+    process.env.TAURI_SIGNING_PRIVATE_KEY = (
+      await Bun.file(defaultUpdaterSigningKeyPath).text()
+    ).trim();
+    process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??= '';
+    return;
+  }
+
+  throw new Error(
+    [
+      'Updater signing key not found.',
+      `Generate one with: bunx tauri signer generate -w ${defaultUpdaterSigningKeyPath}`,
+      'Then keep the private key secret and rerun this release command.',
+    ].join('\n'),
+  );
+}
+
+async function withUpdaterArtifactsEnabled(
+  build: () => boolean,
+): Promise<boolean> {
+  const original = await Bun.file(tauriConfPath).text();
+  const parsed = JSON.parse(original) as TauriConf;
+  parsed.bundle ??= {};
+  parsed.bundle.createUpdaterArtifacts = true;
+
+  await Bun.write(tauriConfPath, `${JSON.stringify(parsed, null, 2)}\n`);
+
+  try {
+    return build();
+  } finally {
+    await Bun.write(tauriConfPath, original);
+  }
 }
 
 // async function updateCaskFile(
@@ -181,6 +303,7 @@ async function deleteBunBuildArtifacts(root: string): Promise<void> {
 function runTauriBuild(): boolean {
   const r = Bun.spawnSync(['bunx', 'tauri', 'build'], {
     cwd: projectRoot,
+    env: { ...process.env },
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
@@ -324,7 +447,8 @@ async function main(): Promise<void> {
 
   console.log('');
   console.log(`${CYAN}Building release v${versionToBuild}...${NC}`);
-  if (!runTauriBuild()) {
+  await ensureUpdaterSigningKey();
+  if (!(await withUpdaterArtifactsEnabled(runTauriBuild))) {
     console.log(`${RED}Build failed!${NC}`);
     process.exit(1);
   }
@@ -343,6 +467,28 @@ async function main(): Promise<void> {
 
   const localDmgName = basename(dmgPath);
   const githubDmgName = githubReleaseDmgBasename(localDmgName);
+  const updaterArchivePath = await findMacUpdaterArchive();
+  if (
+    updaterArchivePath === undefined ||
+    !(await Bun.file(updaterArchivePath).exists())
+  ) {
+    console.log(
+      `${RED}Error: updater archive not found in ${macosBundleDir}${NC}`,
+    );
+    process.exit(1);
+  }
+  const updaterSignaturePath = `${updaterArchivePath}.sig`;
+  if (!(await Bun.file(updaterSignaturePath).exists())) {
+    console.log(
+      `${RED}Error: updater signature not found at ${updaterSignaturePath}${NC}`,
+    );
+    process.exit(1);
+  }
+  const latestUpdaterPath = await writeLatestUpdaterJson(
+    versionToBuild,
+    dmgPath,
+    updaterArchivePath,
+  );
 
   // Homebrew is not wired up for Kokoros yet.
   // await updateHomebrewCaskIfConfigured(versionToBuild, sha256, dmgPath);
@@ -360,6 +506,9 @@ async function main(): Promise<void> {
   console.log(`Version:          ${CYAN}${versionToBuild}${NC}`);
   console.log(`DMG Path:         ${CYAN}${dmgPath}${NC}`);
   console.log(`GitHub DMG Name:  ${CYAN}${githubDmgName}${NC}`);
+  console.log(`Updater Archive:  ${CYAN}${updaterArchivePath}${NC}`);
+  console.log(`Updater Sig:      ${CYAN}${updaterSignaturePath}${NC}`);
+  console.log(`Updater JSON:     ${CYAN}${latestUpdaterPath}${NC}`);
   console.log(`SHA256:           ${CYAN}${sha256}${NC}`);
   console.log(`${GREEN}═══════════════════════════════════════════════════════════════${NC}`);
 
@@ -430,6 +579,9 @@ async function main(): Promise<void> {
       'create',
       `v${versionToBuild}`,
       dmgPath,
+      updaterArchivePath,
+      updaterSignaturePath,
+      latestUpdaterPath,
       '--title',
       `v${versionToBuild}`,
       '--generate-notes',
@@ -460,7 +612,7 @@ async function main(): Promise<void> {
     console.log('');
     console.log('  3. Create GitHub release:');
     console.log(
-      `     gh release create v${versionToBuild} "${dmgPath}" --title "v${versionToBuild}" --generate-notes`,
+      `     gh release create v${versionToBuild} "${dmgPath}" "${updaterArchivePath}" "${updaterSignaturePath}" "${latestUpdaterPath}" --title "v${versionToBuild}" --generate-notes`,
     );
     console.log('');
     console.log(`${YELLOW}Tip: Omit --dry-run to publish automatically.${NC}`);

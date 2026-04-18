@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": false,
     "resources": {
       "../../checkpoints/kokoro-v1.0.onnx": "models/kokoro-v1.0.onnx",
       "../../data/voices-v1.0.bin": "models/voices-v1.0.bin"
@@ -41,5 +42,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVBM0U5OURBOERDMUM5MTAKUldRUXljR04ycGsrV21tb3pwamNDdVZrZVErbWdiRUNvUEI5b2JqMWR3OGpnOFdiUWNkU29uY3EK",
+      "endpoints": [
+        "https://github.com/nikitadrokin/kokoros/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
