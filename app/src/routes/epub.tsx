@@ -353,13 +353,16 @@ function EpubReaderPage() {
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const epubRef = useRef<EpubFile | null>(null);
+	const loadedChapterIdRef = useRef<string | null>(null);
 	const readerTheme = useReaderTheme();
 
 	const [bookTitle, setBookTitle] = useState('');
 	const [chapters, setChapters] = useState<ChapterListItem[]>([]);
 	const [activeChapter, setActiveChapter] = useState<{
+		id: string;
 		chapter: EpubProcessedChapter;
 		scrollSelector: string;
+		scrollRequestId: number;
 	} | null>(null);
 	const [isBusy, setIsBusy] = useState(false);
 	const [error, setError] = useState('');
@@ -377,6 +380,7 @@ function EpubReaderPage() {
 			current.destroy();
 			epubRef.current = null;
 		}
+		loadedChapterIdRef.current = null;
 		setChapters([]);
 		setActiveChapter(null);
 		setBookTitle('');
@@ -389,22 +393,35 @@ function EpubReaderPage() {
 	}, [disposeEpub]);
 
 	const scrollIframeToSelector = useCallback((selector: string) => {
-		if (!selector) {
-			return;
-		}
 		const doc = iframeRef.current?.contentDocument;
 		if (!doc) {
+			return;
+		}
+		if (!selector) {
+			doc.defaultView?.scrollTo({ behavior: 'smooth', top: 0 });
 			return;
 		}
 		const target = doc.querySelector(selector);
 		target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}, []);
 
+	useEffect(() => {
+		if (!activeChapter || loadedChapterIdRef.current !== activeChapter.id) {
+			return;
+		}
+		scrollIframeToSelector(activeChapter.scrollSelector);
+	}, [activeChapter, scrollIframeToSelector]);
+
 	const openChapter = useCallback(
 		async (epub: EpubFile, id: string, scrollSelector: string) => {
 			const processed = await epub.loadChapter(id);
 			startTransition(() => {
-				setActiveChapter({ chapter: processed, scrollSelector });
+				setActiveChapter((current) => ({
+					id,
+					chapter: processed,
+					scrollSelector,
+					scrollRequestId: (current?.scrollRequestId ?? 0) + 1,
+				}));
 			});
 		},
 		[],
@@ -443,9 +460,21 @@ function EpubReaderPage() {
 			return;
 		}
 		setError('');
+		const selector = item.kind === 'toc' ? item.selector : '';
+		if (activeChapter?.id === item.id) {
+			setActiveChapter((current) =>
+				current
+					? {
+							...current,
+							scrollSelector: selector,
+							scrollRequestId: current.scrollRequestId + 1,
+						}
+					: current,
+			);
+			return;
+		}
 		setIsBusy(true);
 		try {
-			const selector = item.kind === 'toc' ? item.selector : '';
 			await openChapter(epub, item.id, selector);
 		} catch (caught) {
 			const message = caught instanceof Error ? caught.message : String(caught);
@@ -568,7 +597,8 @@ function EpubReaderPage() {
 									srcDoc={readerSrcDoc}
 									style={{ colorScheme: readerTheme.colorScheme }}
 									onLoad={() => {
-										if (activeChapter?.scrollSelector) {
+										if (activeChapter) {
+											loadedChapterIdRef.current = activeChapter.id;
 											scrollIframeToSelector(activeChapter.scrollSelector);
 										}
 									}}
