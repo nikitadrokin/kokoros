@@ -4,11 +4,12 @@ use std::{
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::{process::Output, ShellExt};
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 const KOKO_SIDECAR: &str = "koko";
 const MODEL_RESOURCE_PATH: &str = "models/kokoro-v1.0.onnx";
@@ -59,9 +60,20 @@ struct AppUpdateResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 enum AppUpdateStatus {
-    Available,
+    Prepared,
     UpToDate,
     Restarting,
+}
+
+#[derive(Default)]
+struct PreparedAppUpdateState {
+    update: Mutex<Option<PreparedAppUpdate>>,
+}
+
+struct PreparedAppUpdate {
+    version: String,
+    update: Update,
+    bytes: Vec<u8>,
 }
 
 #[tauri::command]
@@ -201,29 +213,10 @@ async fn synthesize_speech(
 }
 
 #[tauri::command]
-async fn check_app_update(app: AppHandle) -> Result<AppUpdateResponse, String> {
-    let update = app
-        .updater()
-        .map_err(|error| format!("Failed to initialize updater: {error}"))?
-        .check()
-        .await
-        .map_err(|error| format!("Failed to check for updates: {error}"))?;
-
-    let Some(update) = update else {
-        return Ok(AppUpdateResponse {
-            status: AppUpdateStatus::UpToDate,
-            version: None,
-        });
-    };
-
-    Ok(AppUpdateResponse {
-        status: AppUpdateStatus::Available,
-        version: Some(update.version),
-    })
-}
-
-#[tauri::command]
-async fn install_app_update(app: AppHandle) -> Result<AppUpdateResponse, String> {
+async fn prepare_app_update(
+    app: AppHandle,
+    prepared_update: State<'_, PreparedAppUpdateState>,
+) -> Result<AppUpdateResponse, String> {
     let update = app
         .updater()
         .map_err(|error| format!("Failed to initialize updater: {error}"))?
@@ -239,10 +232,44 @@ async fn install_app_update(app: AppHandle) -> Result<AppUpdateResponse, String>
     };
 
     let version = update.version.clone();
-    let quarantine_target = app_quarantine_target()?;
-    update
-        .download_and_install(|_, _| {}, || {})
+    let bytes = update
+        .download(|_, _| {}, || {})
         .await
+        .map_err(|error| format!("Failed to download update: {error}"))?;
+
+    let mut prepared = prepared_update
+        .update
+        .lock()
+        .map_err(|_| "Failed to lock prepared update state".to_string())?;
+    *prepared = Some(PreparedAppUpdate {
+        version: version.clone(),
+        update,
+        bytes,
+    });
+
+    Ok(AppUpdateResponse {
+        status: AppUpdateStatus::Prepared,
+        version: Some(version),
+    })
+}
+
+#[tauri::command]
+async fn install_prepared_app_update(
+    app: AppHandle,
+    prepared_update: State<'_, PreparedAppUpdateState>,
+) -> Result<AppUpdateResponse, String> {
+    let prepared = prepared_update
+        .update
+        .lock()
+        .map_err(|_| "Failed to lock prepared update state".to_string())?
+        .take()
+        .ok_or_else(|| "No prepared update found. Check for updates again.".to_string())?;
+
+    let version = prepared.version;
+    let quarantine_target = app_quarantine_target()?;
+    prepared
+        .update
+        .install(prepared.bytes)
         .map_err(|error| format!("Failed to install update: {error}"))?;
 
     clear_installed_app_quarantine(quarantine_target.as_deref())?;
@@ -468,12 +495,13 @@ fn command_log(output: &Output) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(PreparedAppUpdateState::default())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             synthesize_speech,
-            check_app_update,
-            install_app_update
+            prepare_app_update,
+            install_prepared_app_update
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
