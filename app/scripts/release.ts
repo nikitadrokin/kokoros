@@ -18,10 +18,6 @@ type TauriConf = {
   version: string;
   bundle?: {
     createUpdaterArtifacts?: boolean | string;
-    macOS?: {
-      signingIdentity?: string | null;
-      [key: string]: unknown;
-    };
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -37,19 +33,6 @@ const NC = '\x1b[0m';
 type ReleaseCliArgs = {
   /** When true, build only and print manual publish steps (no git/gh). */
   dryRun: boolean;
-  /** When true, force an unsigned macOS bundle. */
-  noCodesign: boolean;
-  /** Optional macOS codesigning identity override. */
-  codesignIdentity?: string;
-};
-
-type MacosCodesign =
-  | { enabled: true; identity?: string; description: string }
-  | { enabled: false; description: string };
-
-type KeychainCodesignIdentity = {
-  hash: string;
-  name: string;
 };
 
 const scriptDir = import.meta.dir;
@@ -58,7 +41,10 @@ const tauriConfPath = join(projectRoot, 'src-tauri/tauri.conf.json');
 const packageJsonPath = join(projectRoot, 'package.json');
 const cargoTomlPath = join(projectRoot, 'src-tauri/Cargo.toml');
 const dmgDir = join(projectRoot, 'src-tauri/target/release/bundle/dmg');
-const macosBundleDir = join(projectRoot, 'src-tauri/target/release/bundle/macos');
+const macosBundleDir = join(
+  projectRoot,
+  'src-tauri/target/release/bundle/macos',
+);
 const latestUpdaterJsonPath = join(macosBundleDir, 'latest.json');
 const defaultUpdaterSigningKeyPath = join(
   homedir(),
@@ -72,27 +58,7 @@ const defaultUpdaterSigningKeyPath = join(
 // const caskFilePath = join(projectRoot, '../homebrew-tap/Casks/kokoros.rb');
 
 function parseArgs(argv: string[]): ReleaseCliArgs {
-  let codesignIdentity: string | undefined;
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg?.startsWith('--codesign-identity=')) {
-      codesignIdentity = arg.slice('--codesign-identity='.length).trim();
-    } else if (arg === '--codesign-identity') {
-      const value = argv[i + 1];
-      if (!value) {
-        throw new Error('Missing value for --codesign-identity');
-      }
-      codesignIdentity = value.trim();
-      i += 1;
-    }
-  }
-
-  return {
-    dryRun: argv.includes('--dry-run'),
-    noCodesign: argv.includes('--no-codesign'),
-    codesignIdentity,
-  };
+  return { dryRun: argv.includes('--dry-run') };
 }
 
 async function readTauriVersion(path: string): Promise<string> {
@@ -226,7 +192,9 @@ async function writeLatestUpdaterJson(
   }
 
   const signature = (await Bun.file(signaturePath).text()).trim();
-  const updaterAssetName = githubReleaseAssetBasename(basename(updaterArchivePath));
+  const updaterAssetName = githubReleaseAssetBasename(
+    basename(updaterArchivePath),
+  );
   const platformKey = updaterPlatformKeyFromDmg(dmgPath);
   const latestJson = {
     version,
@@ -239,7 +207,10 @@ async function writeLatestUpdaterJson(
     },
   };
 
-  await Bun.write(latestUpdaterJsonPath, `${JSON.stringify(latestJson, null, 2)}\n`);
+  await Bun.write(
+    latestUpdaterJsonPath,
+    `${JSON.stringify(latestJson, null, 2)}\n`,
+  );
   return latestUpdaterJsonPath;
 }
 
@@ -273,17 +244,12 @@ async function ensureUpdaterSigningKey(): Promise<void> {
 }
 
 async function withUpdaterArtifactsEnabled(
-  codesign: MacosCodesign,
   build: () => boolean,
 ): Promise<boolean> {
   const original = await Bun.file(tauriConfPath).text();
   const parsed = JSON.parse(original) as TauriConf;
   parsed.bundle ??= {};
   parsed.bundle.createUpdaterArtifacts = true;
-  if (process.platform === 'darwin' && codesign.enabled && codesign.identity) {
-    parsed.bundle.macOS ??= {};
-    parsed.bundle.macOS.signingIdentity = codesign.identity;
-  }
 
   await Bun.write(tauriConfPath, `${JSON.stringify(parsed, null, 2)}\n`);
 
@@ -342,13 +308,8 @@ async function deleteBunBuildArtifacts(root: string): Promise<void> {
   }
 }
 
-function runTauriBuildWithCodesign(codesign: MacosCodesign): boolean {
-  const args = ['tauri', 'build'];
-  if (process.platform === 'darwin' && !codesign.enabled) {
-    args.push('--no-sign');
-  }
-
-  const r = Bun.spawnSync(['bunx', ...args], {
+function runTauriBuild(): boolean {
+  const r = Bun.spawnSync(['bunx', 'tauri', 'build'], {
     cwd: projectRoot,
     env: { ...process.env },
     stdin: 'inherit',
@@ -356,103 +317,6 @@ function runTauriBuildWithCodesign(codesign: MacosCodesign): boolean {
     stderr: 'inherit',
   });
   return r.success;
-}
-
-function keychainCodesignIdentities(): KeychainCodesignIdentity[] {
-  if (process.platform !== 'darwin') {
-    return [];
-  }
-
-  const r = Bun.spawnSync(
-    ['security', 'find-identity', '-v', '-p', 'codesigning'],
-    {
-      cwd: projectRoot,
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'ignore',
-    },
-  );
-  if (!r.success || !r.stdout) {
-    return [];
-  }
-
-  return r.stdout
-    .toString()
-    .split('\n')
-    .map((line) => {
-      const match = line.match(/^\s*\d+\)\s+([A-F0-9]+)\s+"([^"]+)"/);
-      return match ? { hash: match[1], name: match[2] } : undefined;
-    })
-    .filter(
-      (identity): identity is KeychainCodesignIdentity => Boolean(identity),
-    );
-}
-
-function preferredCodesignIdentity(
-  identities: KeychainCodesignIdentity[],
-): KeychainCodesignIdentity | undefined {
-  const preferredPatterns = [
-    /^Developer ID Application:/,
-    /^Apple Distribution:/,
-    /^Apple Development:/,
-  ];
-
-  for (const pattern of preferredPatterns) {
-    const identity = identities.find((value) => pattern.test(value.name));
-    if (identity) {
-      return identity;
-    }
-  }
-
-  return identities[0];
-}
-
-function resolveMacosCodesign(args: ReleaseCliArgs): MacosCodesign {
-  if (process.platform !== 'darwin') {
-    return {
-      enabled: false,
-      description: 'not a macOS build host',
-    };
-  }
-
-  if (args.noCodesign) {
-    return {
-      enabled: false,
-      description: 'disabled by --no-codesign',
-    };
-  }
-
-  const envIdentity =
-    process.env.KOKOROS_CODESIGN_IDENTITY ?? process.env.APPLE_SIGNING_IDENTITY;
-  const explicitIdentity = args.codesignIdentity ?? envIdentity;
-  if (explicitIdentity) {
-    return {
-      enabled: true,
-      identity: explicitIdentity,
-      description: explicitIdentity,
-    };
-  }
-
-  if (process.env.APPLE_CERTIFICATE) {
-    return {
-      enabled: true,
-      description: 'identity inferred by Tauri from APPLE_CERTIFICATE',
-    };
-  }
-
-  const identity = preferredCodesignIdentity(keychainCodesignIdentities());
-  if (identity) {
-    return {
-      enabled: true,
-      identity: identity.hash,
-      description: `${identity.name} (${identity.hash})`,
-    };
-  }
-
-  return {
-    enabled: false,
-    description: 'no valid keychain codesigning identity found',
-  };
 }
 
 function tryExecFile(
@@ -532,22 +396,14 @@ function spawnGhInherit(args: string[]): void {
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
-  const { dryRun } = args;
+  const { dryRun } = parseArgs(process.argv.slice(2));
 
   const currentVersion = await readTauriVersion(tauriConfPath);
   const nextVersion = nextPatchVersion(currentVersion);
   const branch = currentGitBranch();
-  const macosCodesign = resolveMacosCodesign(args);
 
   console.log(`${YELLOW}Current version: ${currentVersion}${NC}`);
   console.log(`${GREEN}Next version:    ${nextVersion}${NC}`);
-  if (process.platform === 'darwin') {
-    const label = macosCodesign.enabled ? 'enabled' : 'disabled';
-    console.log(
-      `${CYAN}macOS codesign:  ${label} (${macosCodesign.description})${NC}`,
-    );
-  }
   console.log('');
 
   const rl = readline.createInterface({
@@ -600,11 +456,7 @@ async function main(): Promise<void> {
   console.log('');
   console.log(`${CYAN}Building release v${versionToBuild}...${NC}`);
   await ensureUpdaterSigningKey();
-  if (
-    !(await withUpdaterArtifactsEnabled(macosCodesign, () =>
-      runTauriBuildWithCodesign(macosCodesign),
-    ))
-  ) {
+  if (!(await withUpdaterArtifactsEnabled(runTauriBuild))) {
     console.log(`${RED}Build failed!${NC}`);
     process.exit(1);
   }
@@ -656,9 +508,13 @@ async function main(): Promise<void> {
   }
 
   console.log('');
-  console.log(`${GREEN}═══════════════════════════════════════════════════════════════${NC}`);
+  console.log(
+    `${GREEN}═══════════════════════════════════════════════════════════════${NC}`,
+  );
   console.log(`${GREEN}SUCCESS! Release Ready${NC}`);
-  console.log(`${GREEN}═══════════════════════════════════════════════════════════════${NC}`);
+  console.log(
+    `${GREEN}═══════════════════════════════════════════════════════════════${NC}`,
+  );
   console.log(`Version:          ${CYAN}${versionToBuild}${NC}`);
   console.log(`DMG Path:         ${CYAN}${dmgPath}${NC}`);
   console.log(`GitHub DMG Name:  ${CYAN}${githubDmgName}${NC}`);
@@ -666,7 +522,9 @@ async function main(): Promise<void> {
   console.log(`Updater Sig:      ${CYAN}${updaterSignaturePath}${NC}`);
   console.log(`Updater JSON:     ${CYAN}${latestUpdaterPath}${NC}`);
   console.log(`SHA256:           ${CYAN}${sha256}${NC}`);
-  console.log(`${GREEN}═══════════════════════════════════════════════════════════════${NC}`);
+  console.log(
+    `${GREEN}═══════════════════════════════════════════════════════════════${NC}`,
+  );
 
   if (!dryRun) {
     console.log('');
@@ -752,7 +610,9 @@ async function main(): Promise<void> {
     console.log('');
 
     if (sameVersionRelease) {
-      console.log('  0. Clean up existing tag/release (errors are safe to ignore):');
+      console.log(
+        '  0. Clean up existing tag/release (errors are safe to ignore):',
+      );
       console.log(`     gh release delete v${versionToBuild} --yes`);
       console.log(`     git push origin --delete v${versionToBuild}`);
       console.log(`     git tag -d v${versionToBuild}`);
@@ -760,7 +620,9 @@ async function main(): Promise<void> {
     }
 
     console.log('  1. Commit changes:');
-    console.log(`     git add -A && git commit -m "Release v${versionToBuild}"`);
+    console.log(
+      `     git add -A && git commit -m "Release v${versionToBuild}"`,
+    );
     console.log('');
     console.log('  2. Create tag:');
     console.log(`     git tag v${versionToBuild}`);
