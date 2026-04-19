@@ -53,6 +53,15 @@ struct SynthesizeSpeechResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct SavedAudioFile {
+    name: String,
+    path: String,
+    modified_sec: Option<u64>,
+    size_bytes: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct AppUpdateResponse {
     status: AppUpdateStatus,
     version: Option<String>,
@@ -227,6 +236,56 @@ async fn synthesize_speech(
         saved_timestamps_path,
         timestamps,
     })
+}
+
+#[tauri::command]
+fn list_saved_audio(app: AppHandle) -> Result<Vec<SavedAudioFile>, String> {
+    let base_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("synthesis");
+
+    if !base_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    for entry in fs::read_dir(&base_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let metadata = entry.metadata().map_err(|error| error.to_string())?;
+
+        if !metadata.is_file() || path.extension().and_then(|value| value.to_str()) != Some("wav") {
+            continue;
+        }
+
+        let modified_sec = metadata
+            .modified()
+            .ok()
+            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+            .map(|value| value.as_secs());
+        let name = path
+            .file_name()
+            .map(|value| value.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+
+        files.push(SavedAudioFile {
+            name,
+            path: path.display().to_string(),
+            modified_sec,
+            size_bytes: metadata.len(),
+        });
+    }
+
+    files.sort_by(|left, right| {
+        right
+            .modified_sec
+            .cmp(&left.modified_sec)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    Ok(files)
 }
 
 #[tauri::command]
@@ -533,6 +592,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             synthesize_speech,
+            list_saved_audio,
             prepare_app_update,
             install_prepared_app_update
         ])

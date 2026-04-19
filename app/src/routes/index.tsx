@@ -1,7 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { AudioLinesIcon, FileAudio, LoaderCircle, Play } from 'lucide-react';
-import { startTransition, useEffect, useRef, useState } from 'react';
+import {
+	AudioLinesIcon,
+	FileAudio,
+	LoaderCircle,
+	Music2,
+	Play,
+	RefreshCw,
+} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -32,6 +39,13 @@ type SynthesizeSpeechResponse = {
 	timestamps: { word: string; startSec: number; endSec: number }[];
 };
 
+type SavedAudioFile = {
+	name: string;
+	path: string;
+	modifiedSec: number | null;
+	sizeBytes: number;
+};
+
 const base64ToBlobUrl = (base64: string) => {
 	const decoded = window.atob(base64);
 	const bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0));
@@ -44,6 +58,30 @@ const revokeBlobUrl = (url: string) => {
 	}
 };
 
+const formatFileSize = (bytes: number) => {
+	if (bytes < 1024) {
+		return `${bytes} B`;
+	}
+
+	const kib = bytes / 1024;
+	if (kib < 1024) {
+		return `${kib.toFixed(1)} KB`;
+	}
+
+	return `${(kib / 1024).toFixed(1)} MB`;
+};
+
+const formatModifiedTime = (modifiedSec: number | null) => {
+	if (!modifiedSec) {
+		return 'Unknown date';
+	}
+
+	return new Intl.DateTimeFormat(undefined, {
+		dateStyle: 'medium',
+		timeStyle: 'short',
+	}).format(new Date(modifiedSec * 1000));
+};
+
 function PlaygroundPage() {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const [text, setText] = useState(
@@ -54,7 +92,10 @@ function PlaygroundPage() {
 	const [saveToDisk, setSaveToDisk] = useState(true);
 	const [savedOutputPath, setSavedOutputPath] = useState('');
 	const [isGenerating, setIsGenerating] = useState(false);
+	const [isLoadingSavedAudio, setIsLoadingSavedAudio] = useState(false);
+	const [savedAudioFiles, setSavedAudioFiles] = useState<SavedAudioFile[]>([]);
 	const [error, setError] = useState('');
+	const [savedAudioError, setSavedAudioError] = useState('');
 
 	useEffect(() => {
 		return () => {
@@ -63,6 +104,38 @@ function PlaygroundPage() {
 			}
 		};
 	}, [audioUrl]);
+
+	const setPlayerSource = (nextUrl: string, nextSavedOutputPath: string) => {
+		setSavedOutputPath(nextSavedOutputPath);
+		setAudioUrl((currentUrl) => {
+			if (currentUrl) {
+				revokeBlobUrl(currentUrl);
+			}
+			return nextUrl;
+		});
+	};
+
+	const loadSavedAudio = useCallback(async () => {
+		setSavedAudioError('');
+		setIsLoadingSavedAudio(true);
+
+		try {
+			const files = await invoke<SavedAudioFile[]>('list_saved_audio');
+			setSavedAudioFiles(files);
+		} catch (caughtError) {
+			const message =
+				caughtError instanceof Error
+					? caughtError.message
+					: String(caughtError);
+			setSavedAudioError(message);
+		} finally {
+			setIsLoadingSavedAudio(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		void loadSavedAudio();
+	}, [loadSavedAudio]);
 
 	const handleGenerate = async () => {
 		if (isGenerating) {
@@ -96,19 +169,15 @@ function PlaygroundPage() {
 				throw new Error('No generated audio was returned.');
 			}
 
-			startTransition(() => {
-				setSavedOutputPath(response.savedOutputPath ?? '');
-				setAudioUrl((currentUrl) => {
-					if (currentUrl) {
-						revokeBlobUrl(currentUrl);
-					}
-					return nextUrl;
-				});
-			});
+			setPlayerSource(nextUrl, response.savedOutputPath ?? '');
 
 			requestAnimationFrame(() => {
 				audioRef.current?.play().catch(() => undefined);
 			});
+
+			if (response.savedOutputPath) {
+				void loadSavedAudio();
+			}
 		} catch (caughtError) {
 			const message =
 				caughtError instanceof Error
@@ -122,6 +191,14 @@ function PlaygroundPage() {
 
 	const handlePlay = () => {
 		audioRef.current?.play().catch(() => undefined);
+	};
+
+	const handlePlaySavedAudio = (file: SavedAudioFile) => {
+		setError('');
+		setPlayerSource(convertFileSrc(file.path), file.path);
+		requestAnimationFrame(() => {
+			audioRef.current?.play().catch(() => undefined);
+		});
 	};
 
 	return (
@@ -211,45 +288,117 @@ function PlaygroundPage() {
 						</CardContent>
 					</Card>
 
-					<Card className="shadow-sm backdrop-blur xl:self-start">
-						<CardHeader>
-							<CardTitle className="flex items-center gap-2">
-								<FileAudio className="size-4 text-muted-foreground" />
-								Audio
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="grid gap-3">
-							<div className="rounded-lg">
-								{/* biome-ignore lint/a11y/useMediaCaption: Generated speech previews do not have a caption track yet. */}
-								<audio
-									ref={audioRef}
-									controls
-									preload="auto"
-									src={audioUrl || undefined}
-									aria-label="Generated audio preview"
-									className="h-10 w-full"
-								/>
-							</div>
+					<div className="grid gap-4 xl:self-start">
+						<Card className="shadow-sm backdrop-blur">
+							<CardHeader>
+								<CardTitle className="flex items-center gap-2">
+									<FileAudio className="size-4 text-muted-foreground" />
+									Audio
+								</CardTitle>
+							</CardHeader>
+							<CardContent className="grid gap-3">
+								<div className="rounded-lg">
+									{/* biome-ignore lint/a11y/useMediaCaption: Generated speech previews do not have a caption track yet. */}
+									<audio
+										ref={audioRef}
+										controls
+										preload="auto"
+										src={audioUrl || undefined}
+										aria-label="Generated audio preview"
+										className="h-10 w-full"
+									/>
+								</div>
 
-							<Button
-								variant="secondary"
-								className="w-full"
-								onClick={handlePlay}
-								disabled={!audioUrl || isGenerating}
-							>
-								<Play className="size-4" />
-								Play again
-							</Button>
+								<Button
+									variant="secondary"
+									className="w-full"
+									onClick={handlePlay}
+									disabled={!audioUrl || isGenerating}
+								>
+									<Play className="size-4" />
+									Play again
+								</Button>
 
-							<p className="text-muted-foreground text-sm">
-								{savedOutputPath
-									? `Saved to ${savedOutputPath}`
-									: audioUrl
-										? 'Latest render is ready above.'
-										: 'Generate audio to preview it here.'}
-							</p>
-						</CardContent>
-					</Card>
+								<p className="break-words text-muted-foreground text-sm">
+									{savedOutputPath
+										? `Saved to ${savedOutputPath}`
+										: audioUrl
+											? 'Latest render is ready above.'
+											: 'Generate audio to preview it here.'}
+								</p>
+							</CardContent>
+						</Card>
+
+						<Card className="shadow-sm backdrop-blur">
+							<CardHeader className="grid-cols-[1fr_auto] items-center">
+								<CardTitle className="flex items-center gap-2">
+									<Music2 className="size-4 text-muted-foreground" />
+									Saved audio
+								</CardTitle>
+								<Button
+									variant="outline"
+									size="icon-sm"
+									onClick={() => void loadSavedAudio()}
+									disabled={isLoadingSavedAudio}
+									aria-label="Refresh saved audio"
+									title="Refresh saved audio"
+								>
+									<RefreshCw
+										className={
+											isLoadingSavedAudio ? 'size-4 animate-spin' : 'size-4'
+										}
+									/>
+								</Button>
+							</CardHeader>
+							<CardContent className="grid gap-3">
+								{savedAudioError ? (
+									<div className="rounded-lg bg-destructive/10 px-3 py-2 text-destructive text-sm">
+										{savedAudioError}
+									</div>
+								) : null}
+
+								{savedAudioFiles.length > 0 ? (
+									<div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+										{savedAudioFiles.map((file) => {
+											const isActive = savedOutputPath === file.path;
+
+											return (
+												<div
+													key={file.path}
+													className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border px-3 py-2"
+												>
+													<div className="min-w-0">
+														<p className="truncate font-medium text-sm">
+															{file.name}
+														</p>
+														<p className="truncate text-muted-foreground text-xs">
+															{formatModifiedTime(file.modifiedSec)} ·{' '}
+															{formatFileSize(file.sizeBytes)}
+														</p>
+													</div>
+													<Button
+														variant={isActive ? 'default' : 'secondary'}
+														size="icon-sm"
+														onClick={() => handlePlaySavedAudio(file)}
+														aria-label={`Play ${file.name}`}
+														title={`Play ${file.name}`}
+													>
+														<Play className="size-4" />
+													</Button>
+												</div>
+											);
+										})}
+									</div>
+								) : (
+									<p className="text-muted-foreground text-sm">
+										{isLoadingSavedAudio
+											? 'Loading saved audio…'
+											: 'Saved WAV files will appear here.'}
+									</p>
+								)}
+							</CardContent>
+						</Card>
+					</div>
 				</div>
 			</div>
 		</main>
