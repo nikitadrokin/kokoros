@@ -3,12 +3,16 @@ use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsString,
     fs,
+    io::{Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Manager, State};
-use tauri_plugin_shell::{process::Output, ShellExt};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_shell::{
+    process::{CommandEvent, Output},
+    ShellExt,
+};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const KOKO_SIDECAR: &str = "koko";
@@ -16,6 +20,12 @@ const MODEL_RESOURCE_PATH: &str = "models/kokoro-v1.0.onnx";
 const VOICES_RESOURCE_PATH: &str = "models/voices-v1.0.bin";
 const DEV_MODEL_PATH: &str = "checkpoints/kokoro-v1.0.onnx";
 const DEV_VOICES_PATH: &str = "data/voices-v1.0.bin";
+const SPEECH_STREAM_CHUNK_EVENT: &str = "speech-stream-chunk";
+const STREAM_SAMPLE_RATE: u32 = 24_000;
+const STREAM_CHANNELS: u16 = 1;
+const WAV_HEADER_BYTES: usize = 44;
+const FLOAT_SAMPLE_BYTES: usize = 4;
+const MAX_STREAM_CHUNK_CHARS: usize = 240;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +41,7 @@ struct SynthesizeSpeechRequest {
     initial_silence: Option<usize>,
     mono: bool,
     timestamps: bool,
+    stream_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -49,6 +60,24 @@ struct SynthesizeSpeechResponse {
     saved_output_path: Option<String>,
     saved_timestamps_path: Option<String>,
     timestamps: Vec<TimestampRow>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SynthesizeSpeechStreamResponse {
+    sample_rate: u32,
+    channels: u16,
+    saved_output_path: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct SpeechStreamChunkEvent {
+    stream_id: String,
+    audio_base64: String,
+    sample_rate: u32,
+    channels: u16,
+    sample_format: &'static str,
 }
 
 #[derive(Serialize)]
@@ -235,6 +264,197 @@ async fn synthesize_speech(
         saved_output_path,
         saved_timestamps_path,
         timestamps,
+    })
+}
+
+#[tauri::command]
+async fn synthesize_speech_stream(
+    request: SynthesizeSpeechRequest,
+    app: AppHandle,
+) -> Result<SynthesizeSpeechStreamResponse, String> {
+    let text = request.text.trim().to_string();
+    if text.is_empty() {
+        return Err("Enter some text before generating audio.".into());
+    }
+
+    if request.timestamps {
+        return Err("Word timestamps are not supported while streaming.".into());
+    }
+
+    let language = request
+        .language
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("en-us")
+        .to_string();
+    let style = request
+        .style
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("af_heart")
+        .to_string();
+    let speed = request.speed.unwrap_or(1.0);
+    let save_to_disk = request.save_to_disk.unwrap_or(false);
+    let stream_id = request
+        .stream_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("default")
+        .to_string();
+
+    let model_path = resolve_input_or_resource(
+        &app,
+        request.model_path.as_deref(),
+        MODEL_RESOURCE_PATH,
+        DEV_MODEL_PATH,
+    )?;
+    let data_path = resolve_input_or_resource(
+        &app,
+        request.data_path.as_deref(),
+        VOICES_RESOURCE_PATH,
+        DEV_VOICES_PATH,
+    )?;
+
+    let requested_output_path = request
+        .output_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let should_keep_output = requested_output_path.is_some() || save_to_disk;
+    let output_path = if let Some(path) = requested_output_path {
+        Some(resolve_output_path(&app, path)?)
+    } else if save_to_disk {
+        Some(create_saved_output_path(&app)?)
+    } else {
+        None
+    };
+
+    if let Some(path) = output_path.as_ref() {
+        ensure_parent_dir(path)?;
+    }
+
+    let text_chunks = chunk_text_for_stream(&text);
+    if text_chunks.is_empty() {
+        return Err("Enter some text before generating audio.".into());
+    }
+
+    let mut args = Vec::<OsString>::new();
+    args.extend([
+        OsString::from("--lan"),
+        OsString::from(language),
+        OsString::from("--model"),
+        model_path.into_os_string(),
+        OsString::from("--data"),
+        data_path.into_os_string(),
+        OsString::from("--style"),
+        OsString::from(style),
+        OsString::from("--speed"),
+        OsString::from(speed.to_string()),
+    ]);
+
+    if let Some(initial_silence) = request.initial_silence {
+        args.push(OsString::from("--initial-silence"));
+        args.push(OsString::from(initial_silence.to_string()));
+    }
+
+    args.push(OsString::from("stream"));
+
+    let mut output_file = if let Some(path) = output_path.as_ref() {
+        Some(fs::File::create(path).map_err(|error| {
+            format!(
+                "Failed to create streaming output `{}`: {error}",
+                path.display()
+            )
+        })?)
+    } else {
+        None
+    };
+
+    let (mut rx, mut child) = app
+        .shell()
+        .sidecar(KOKO_SIDECAR)
+        .map_err(|error| error.to_string())?
+        .args(args)
+        .set_raw_out(true)
+        .spawn()
+        .map_err(|error| error.to_string())?;
+
+    let writer_task = tauri::async_runtime::spawn_blocking(move || {
+        for chunk in text_chunks {
+            child.write(format!("{chunk}\n").as_bytes())?;
+        }
+
+        Ok::<(), tauri_plugin_shell::Error>(())
+    });
+
+    let mut stderr = Vec::new();
+    let mut wav_header = Vec::with_capacity(WAV_HEADER_BYTES);
+    let mut pending_sample_bytes = Vec::with_capacity(FLOAT_SAMPLE_BYTES);
+    let mut total_stdout_bytes = 0u64;
+    let mut exit_code = None;
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            CommandEvent::Stdout(bytes) => {
+                if bytes.is_empty() {
+                    continue;
+                }
+
+                total_stdout_bytes = total_stdout_bytes.saturating_add(bytes.len() as u64);
+                if let Some(file) = output_file.as_mut() {
+                    file.write_all(&bytes).map_err(|error| {
+                        format!("Failed to write streamed audio to disk: {error}")
+                    })?;
+                }
+
+                let audio_bytes = strip_stream_wav_header(&mut wav_header, &bytes)?;
+                emit_stream_audio_bytes(&app, &stream_id, audio_bytes, &mut pending_sample_bytes)?;
+            }
+            CommandEvent::Stderr(bytes) => {
+                append_limited_command_bytes(&mut stderr, &bytes);
+            }
+            CommandEvent::Error(error) => {
+                return Err(format!("Failed while reading koko stream: {error}"));
+            }
+            CommandEvent::Terminated(payload) => {
+                exit_code = payload.code;
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    writer_task
+        .await
+        .map_err(|error| format!("Failed to finish sending text to koko: {error}"))?
+        .map_err(|error| format!("Failed to send text to koko: {error}"))?;
+
+    if !pending_sample_bytes.is_empty() {
+        return Err("koko stream ended with a partial float sample.".to_string());
+    }
+
+    if let Some(file) = output_file.as_mut() {
+        if total_stdout_bytes < WAV_HEADER_BYTES as u64 {
+            return Err("koko stream ended before writing a complete WAV header.".to_string());
+        }
+
+        let data_bytes = total_stdout_bytes - WAV_HEADER_BYTES as u64;
+        patch_stream_wav_header(file, data_bytes)?;
+    }
+
+    if exit_code != Some(0) {
+        return Err(format_stream_command_failure(exit_code, &stderr));
+    }
+
+    Ok(SynthesizeSpeechStreamResponse {
+        sample_rate: STREAM_SAMPLE_RATE,
+        channels: STREAM_CHANNELS,
+        saved_output_path: output_path
+            .filter(|_| should_keep_output)
+            .map(|path| path.display().to_string()),
     })
 }
 
@@ -536,6 +756,110 @@ fn resolve_saved_audio_path(base_dir: &Path, input: &str) -> Result<PathBuf, Str
     Ok(saved_path)
 }
 
+fn chunk_text_for_stream(text: &str) -> Vec<String> {
+    let mut chunks = Vec::new();
+
+    for line in text.lines() {
+        let mut current = String::new();
+
+        for word in line.split_whitespace() {
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(word);
+
+            let has_sentence_break = matches!(
+                word.chars().last(),
+                Some('.') | Some('!') | Some('?') | Some(';') | Some(':')
+            );
+            if has_sentence_break || current.len() >= MAX_STREAM_CHUNK_CHARS {
+                chunks.push(std::mem::take(&mut current));
+            }
+        }
+
+        if !current.is_empty() {
+            chunks.push(current);
+        }
+    }
+
+    chunks
+}
+
+fn strip_stream_wav_header<'a>(
+    wav_header: &mut Vec<u8>,
+    bytes: &'a [u8],
+) -> Result<&'a [u8], String> {
+    if wav_header.len() >= WAV_HEADER_BYTES {
+        return Ok(bytes);
+    }
+
+    let header_bytes_needed = WAV_HEADER_BYTES - wav_header.len();
+    let header_bytes_to_take = header_bytes_needed.min(bytes.len());
+    wav_header.extend_from_slice(&bytes[..header_bytes_to_take]);
+
+    if wav_header.len() == WAV_HEADER_BYTES
+        && (wav_header.get(0..4) != Some(b"RIFF") || wav_header.get(8..12) != Some(b"WAVE"))
+    {
+        return Err("koko stream did not start with a WAV header.".to_string());
+    }
+
+    Ok(&bytes[header_bytes_to_take..])
+}
+
+fn emit_stream_audio_bytes(
+    app: &AppHandle,
+    stream_id: &str,
+    audio_bytes: &[u8],
+    pending_sample_bytes: &mut Vec<u8>,
+) -> Result<(), String> {
+    if audio_bytes.is_empty() {
+        return Ok(());
+    }
+
+    pending_sample_bytes.extend_from_slice(audio_bytes);
+    let aligned_len =
+        pending_sample_bytes.len() - (pending_sample_bytes.len() % FLOAT_SAMPLE_BYTES);
+    if aligned_len == 0 {
+        return Ok(());
+    }
+
+    let aligned_bytes = pending_sample_bytes[..aligned_len].to_vec();
+    pending_sample_bytes.drain(..aligned_len);
+
+    app.emit(
+        SPEECH_STREAM_CHUNK_EVENT,
+        SpeechStreamChunkEvent {
+            stream_id: stream_id.to_string(),
+            audio_base64: BASE64.encode(aligned_bytes),
+            sample_rate: STREAM_SAMPLE_RATE,
+            channels: STREAM_CHANNELS,
+            sample_format: "float32le",
+        },
+    )
+    .map_err(|error| error.to_string())
+}
+
+fn patch_stream_wav_header(file: &mut fs::File, data_bytes: u64) -> Result<(), String> {
+    let data_size = u32::try_from(data_bytes)
+        .map_err(|_| "Generated audio is too large for a WAV file.".to_string())?;
+    let riff_chunk_size = 36u32.saturating_add(data_size);
+
+    file.flush()
+        .map_err(|error| format!("Failed to flush streamed audio: {error}"))?;
+    file.seek(SeekFrom::Start(4))
+        .map_err(|error| format!("Failed to patch WAV header: {error}"))?;
+    file.write_all(&riff_chunk_size.to_le_bytes())
+        .map_err(|error| format!("Failed to patch WAV header: {error}"))?;
+    file.seek(SeekFrom::Start(40))
+        .map_err(|error| format!("Failed to patch WAV header: {error}"))?;
+    file.write_all(&data_size.to_le_bytes())
+        .map_err(|error| format!("Failed to patch WAV header: {error}"))?;
+    file.seek(SeekFrom::End(0))
+        .map_err(|error| format!("Failed to finalize streamed WAV: {error}"))?;
+    file.flush()
+        .map_err(|error| format!("Failed to finalize streamed WAV: {error}"))
+}
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
@@ -611,6 +935,28 @@ fn format_command_failure(output: &Output) -> String {
     format!("koko exited with code {code}. {}", command_log(output))
 }
 
+fn format_stream_command_failure(code: Option<i32>, stderr: &[u8]) -> String {
+    let code = code.map_or_else(|| "unknown".to_string(), |code| code.to_string());
+    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+
+    if stderr.is_empty() {
+        format!("koko stream exited with code {code}. No stderr was captured.")
+    } else {
+        format!("koko stream exited with code {code}. stderr: {stderr}")
+    }
+}
+
+fn append_limited_command_bytes(buffer: &mut Vec<u8>, bytes: &[u8]) {
+    const MAX_COMMAND_LOG_BYTES: usize = 16 * 1024;
+
+    if buffer.len() >= MAX_COMMAND_LOG_BYTES {
+        return;
+    }
+
+    let remaining = MAX_COMMAND_LOG_BYTES - buffer.len();
+    buffer.extend_from_slice(&bytes[..bytes.len().min(remaining)]);
+}
+
 fn command_log(output: &Output) -> String {
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -631,6 +977,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             synthesize_speech,
+            synthesize_speech_stream,
             list_saved_audio,
             delete_saved_audio,
             prepare_app_update,
