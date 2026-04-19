@@ -21,6 +21,12 @@
       }
     ],
     "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/synthesis/**"
+        ]
+      },
       "csp": null
     }
   },

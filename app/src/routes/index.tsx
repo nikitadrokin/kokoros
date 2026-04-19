@@ -318,14 +318,6 @@ function PlaygroundPage() {
 									<Play className="size-4" />
 									Play again
 								</Button>
-
-								<p className="break-words text-muted-foreground text-sm">
-									{savedOutputPath
-										? `Saved to ${savedOutputPath}`
-										: audioUrl
-											? 'Latest render is ready above.'
-											: 'Generate audio to preview it here.'}
-								</p>
 							</CardContent>
 						</Card>
 
