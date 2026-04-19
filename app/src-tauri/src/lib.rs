@@ -240,11 +240,7 @@ async fn synthesize_speech(
 
 #[tauri::command]
 fn list_saved_audio(app: AppHandle) -> Result<Vec<SavedAudioFile>, String> {
-    let base_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("synthesis");
+    let base_dir = saved_audio_dir(&app)?;
 
     if !base_dir.exists() {
         return Ok(Vec::new());
@@ -286,6 +282,26 @@ fn list_saved_audio(app: AppHandle) -> Result<Vec<SavedAudioFile>, String> {
     });
 
     Ok(files)
+}
+
+#[tauri::command]
+fn delete_saved_audio(path: String, app: AppHandle) -> Result<(), String> {
+    let base_dir = saved_audio_dir(&app)?;
+    let saved_path = resolve_saved_audio_path(&base_dir, &path)?;
+    let timestamps_path = derive_tsv_path_from_wav(&saved_path);
+
+    fs::remove_file(&saved_path).map_err(|error| {
+        format!(
+            "Failed to delete saved audio `{}`: {error}",
+            saved_path.display()
+        )
+    })?;
+
+    if timestamps_path.exists() {
+        let _ = fs::remove_file(timestamps_path);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -482,11 +498,7 @@ fn create_temp_output_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn create_saved_output_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let base_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("synthesis");
+    let base_dir = saved_audio_dir(app)?;
     fs::create_dir_all(&base_dir).map_err(|error| error.to_string())?;
 
     let timestamp = SystemTime::now()
@@ -495,6 +507,33 @@ fn create_saved_output_path(app: &AppHandle) -> Result<PathBuf, String> {
         .as_nanos();
 
     Ok(base_dir.join(format!("speech-{}-{timestamp}.wav", std::process::id())))
+}
+
+fn saved_audio_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("synthesis"))
+        .map_err(|error| error.to_string())
+}
+
+fn resolve_saved_audio_path(base_dir: &Path, input: &str) -> Result<PathBuf, String> {
+    let input_path = Path::new(input);
+    if input_path.extension().and_then(|value| value.to_str()) != Some("wav") {
+        return Err("Only saved WAV files can be deleted.".to_string());
+    }
+
+    let base_dir = base_dir
+        .canonicalize()
+        .map_err(|error| format!("Failed to resolve saved audio directory: {error}"))?;
+    let saved_path = input_path
+        .canonicalize()
+        .map_err(|error| format!("Failed to resolve saved audio path: {error}"))?;
+
+    if !saved_path.starts_with(&base_dir) {
+        return Err("Saved audio path is outside the synthesis folder.".to_string());
+    }
+
+    Ok(saved_path)
 }
 
 fn repo_root() -> PathBuf {
@@ -593,6 +632,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             synthesize_speech,
             list_saved_audio,
+            delete_saved_audio,
             prepare_app_update,
             install_prepared_app_update
         ])
