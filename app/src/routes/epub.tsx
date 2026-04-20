@@ -8,10 +8,15 @@ import {
   type NavPoint,
 } from '@lingo-reader/epub-parser';
 import { createFileRoute } from '@tanstack/react-router';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import {
+  AudioLinesIcon,
   BookOpen,
+  Download,
+  FileAudio,
   FileText,
   LoaderCircle,
+  Play,
   Section,
   Upload,
 } from 'lucide-react';
@@ -26,6 +31,21 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
+import { Switch } from '@/components/ui/switch';
+import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
+import {
+  extractSelectedSpeechText,
+  extractSpeechTextFromChapterHtml,
+} from '@/lib/epub-speech';
+import { VOICE_OPTIONS } from '@/lib/voice-options';
 
 export const Route = createFileRoute('/epub')({ component: EpubReaderPage });
 
@@ -48,6 +68,22 @@ type TocListItem = {
 };
 
 type ChapterListItem = SpineListItem | TocListItem;
+
+type NarrationScope = 'chapter' | 'section' | 'selection';
+
+type SynthesizeSpeechResponse = {
+  audioBase64: string | null;
+  sampleRate: number;
+  savedOutputPath: string | null;
+  savedTimestampsPath: string | null;
+  timestamps: TimestampRow[];
+};
+
+type TimestampRow = {
+  word: string;
+  startSec: number;
+  endSec: number;
+};
 
 type ReaderTheme = {
   background: string;
@@ -113,6 +149,47 @@ function chapterListItemKey(item: ChapterListItem): string {
   return item.kind === 'toc'
     ? `toc-${item.navId}-${item.playOrder}-${item.id}-${item.selector}`
     : `spine-${item.id}`;
+}
+
+function chapterListItemIndex(
+  items: ChapterListItem[],
+  item: ChapterListItem | null,
+): number {
+  if (!item) {
+    return -1;
+  }
+
+  const key = chapterListItemKey(item);
+  return items.findIndex((candidate) => chapterListItemKey(candidate) === key);
+}
+
+function findNextSectionSelector(
+  items: ChapterListItem[],
+  item: ChapterListItem | null,
+): string {
+  if (!item || item.kind !== 'toc' || !item.selector) {
+    return '';
+  }
+
+  const currentIndex = chapterListItemIndex(items, item);
+  if (currentIndex < 0) {
+    return '';
+  }
+
+  for (const nextItem of items.slice(currentIndex + 1)) {
+    if (nextItem.id !== item.id) {
+      return '';
+    }
+    if (nextItem.kind === 'toc' && nextItem.selector) {
+      return nextItem.selector;
+    }
+  }
+
+  return '';
+}
+
+function formatSpeedLabel(speed: number): string {
+  return `${speed.toFixed(2).replace(/\.?0+$/, '')}x`;
 }
 
 function readCssVariable(styles: CSSStyleDeclaration, name: string): string {
@@ -358,20 +435,43 @@ function chapterDocument(
 function EpubReaderPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const epubRef = useRef<EpubFile | null>(null);
   const loadedChapterIdRef = useRef<string | null>(null);
   const readerTheme = useReaderTheme();
 
   const [bookTitle, setBookTitle] = useState('');
   const [chapters, setChapters] = useState<ChapterListItem[]>([]);
+  const [activeListItem, setActiveListItem] = useState<ChapterListItem | null>(
+    null,
+  );
   const [activeChapter, setActiveChapter] = useState<{
     id: string;
     chapter: EpubProcessedChapter;
     scrollSelector: string;
     scrollRequestId: number;
   } | null>(null);
+  const [narrationScope, setNarrationScope] =
+    useState<NarrationScope>('chapter');
+  const [narrationStyle, setNarrationStyle] = useState('af_heart');
+  const [narrationSpeed, setNarrationSpeed] = useState(1);
+  const [saveNarrationToDisk, setSaveNarrationToDisk] = useState(true);
+  const [isGeneratingFile, setIsGeneratingFile] = useState(false);
+  const [narrationStatus, setNarrationStatus] = useState('');
+  const [timestampCount, setTimestampCount] = useState(0);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState('');
+  const {
+    audioUrl,
+    clearPlayerSource,
+    error: narrationError,
+    generateStream,
+    isGenerating: isReadingAloud,
+    play: playNarration,
+    savedOutputPath,
+    setError: setNarrationError,
+    setPlayerSource,
+  } = useSpeechStreamGeneration({ audioRef });
   const readerSrcDoc = useMemo(
     () =>
       activeChapter
@@ -388,9 +488,14 @@ function EpubReaderPage() {
     }
     loadedChapterIdRef.current = null;
     setChapters([]);
+    setActiveListItem(null);
     setActiveChapter(null);
     setBookTitle('');
-  }, []);
+    setNarrationStatus('');
+    setTimestampCount(0);
+    setNarrationError('');
+    clearPlayerSource();
+  }, [clearPlayerSource, setNarrationError]);
 
   useEffect(() => {
     return () => {
@@ -450,6 +555,7 @@ function EpubReaderPage() {
       const first = list[0];
       if (first) {
         const selector = first.kind === 'toc' ? first.selector : '';
+        setActiveListItem(first);
         await openChapter(epub, first.id, selector);
       }
     } catch (caught) {
@@ -466,8 +572,11 @@ function EpubReaderPage() {
       return;
     }
     setError('');
+    setNarrationStatus('');
+    setNarrationError('');
     const selector = item.kind === 'toc' ? item.selector : '';
     if (activeChapter?.id === item.id) {
+      setActiveListItem(item);
       setActiveChapter((current) =>
         current
           ? {
@@ -481,6 +590,7 @@ function EpubReaderPage() {
     }
     setIsBusy(true);
     try {
+      setActiveListItem(item);
       await openChapter(epub, item.id, selector);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
@@ -489,6 +599,138 @@ function EpubReaderPage() {
       setIsBusy(false);
     }
   };
+
+  const buildNarrationText = useCallback(() => {
+    if (!activeChapter) {
+      return '';
+    }
+
+    if (narrationScope === 'selection') {
+      return extractSelectedSpeechText(iframeRef.current?.contentDocument);
+    }
+
+    if (
+      narrationScope === 'section' &&
+      activeListItem?.kind === 'toc' &&
+      activeListItem.selector
+    ) {
+      return extractSpeechTextFromChapterHtml(activeChapter.chapter.html, {
+        startSelector: activeListItem.selector,
+        endSelector: findNextSectionSelector(chapters, activeListItem),
+      });
+    }
+
+    return extractSpeechTextFromChapterHtml(activeChapter.chapter.html);
+  }, [activeChapter, activeListItem, chapters, narrationScope]);
+
+  const buildNarrationOutputNames = useCallback(() => {
+    const itemIndex = chapterListItemIndex(chapters, activeListItem);
+    const numberPrefix =
+      itemIndex >= 0 ? `${String(itemIndex + 1).padStart(3, '0')} - ` : '';
+    const chapterLabel = activeListItem?.label || 'Current chapter';
+    const scopeLabel =
+      narrationScope === 'selection'
+        ? 'Selection'
+        : narrationScope === 'section'
+          ? 'Section'
+          : 'Chapter';
+
+    return {
+      outputLabel: `${numberPrefix}${chapterLabel} - ${scopeLabel} - ${narrationStyle} - ${formatSpeedLabel(narrationSpeed)}`,
+      outputSubdir: `books/${bookTitle || 'Untitled book'}`,
+    };
+  }, [
+    activeListItem,
+    bookTitle,
+    chapters,
+    narrationScope,
+    narrationSpeed,
+    narrationStyle,
+  ]);
+
+  const handleReadAloud = async () => {
+    const text = buildNarrationText();
+    if (!text) {
+      setNarrationError(
+        narrationScope === 'selection'
+          ? 'Select text in the reading pane before reading a selection.'
+          : 'This EPUB section did not contain readable text.',
+      );
+      return;
+    }
+
+    setNarrationStatus('');
+    setTimestampCount(0);
+    const response = await generateStream({
+      text,
+      style: narrationStyle,
+      speed: narrationSpeed,
+      saveToDisk: saveNarrationToDisk,
+      ...buildNarrationOutputNames(),
+    });
+
+    if (response?.savedOutputPath) {
+      setNarrationStatus(`Saved ${response.savedOutputPath}`);
+    }
+  };
+
+  const handleGenerateFile = async () => {
+    const text = buildNarrationText();
+    if (!text) {
+      setNarrationError(
+        narrationScope === 'selection'
+          ? 'Select text in the reading pane before generating a selection.'
+          : 'This EPUB section did not contain readable text.',
+      );
+      return;
+    }
+
+    setNarrationError('');
+    setNarrationStatus('');
+    setTimestampCount(0);
+    setIsGeneratingFile(true);
+
+    try {
+      const response = await invoke<SynthesizeSpeechResponse>(
+        'synthesize_speech',
+        {
+          request: {
+            text,
+            style: narrationStyle,
+            speed: narrationSpeed,
+            saveToDisk: true,
+            mono: true,
+            timestamps: true,
+            ...buildNarrationOutputNames(),
+          },
+        },
+      );
+
+      if (!response.savedOutputPath) {
+        throw new Error('The generated chapter audio was not saved.');
+      }
+
+      setPlayerSource(
+        convertFileSrc(response.savedOutputPath),
+        response.savedOutputPath,
+      );
+      setTimestampCount(response.timestamps.length);
+      setNarrationStatus(
+        response.savedTimestampsPath
+          ? `Saved ${response.savedOutputPath} with word timings`
+          : `Saved ${response.savedOutputPath}`,
+      );
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setNarrationError(message);
+    } finally {
+      setIsGeneratingFile(false);
+    }
+  };
+
+  const sectionScopeUnavailable =
+    activeListItem?.kind !== 'toc' || !activeListItem.selector;
+  const isNarrationBusy = isReadingAloud || isGeneratingFile;
 
   return (
     <main className='min-h-[calc(100vh-4.5rem)] p-4 md:p-6'>
@@ -506,107 +748,282 @@ function EpubReaderPage() {
         </div>
 
         <div className='grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]'>
-          <Card className='min-w-0 shadow-sm backdrop-blur lg:self-start'>
-            <CardHeader className='space-y-1'>
-              <CardTitle className='flex items-center gap-2 text-base'>
-                <BookOpen className='size-4 text-muted-foreground' />
-                Library
-              </CardTitle>
-            </CardHeader>
-            <CardContent className='grid gap-4 pt-4'>
-              <input
-                ref={fileInputRef}
-                type='file'
-                accept='.epub,application/epub+zip'
-                className='sr-only'
-                aria-label='Choose EPUB file'
-                onChange={(event) => {
-                  const next = event.target.files?.[0];
-                  void handleFileChange(next);
-                  event.target.value = '';
-                }}
-              />
-              <div className='space-y-2'>
-                <Label htmlFor='epub-file-trigger'>EPUB file</Label>
-                <Button
-                  id='epub-file-trigger'
-                  type='button'
-                  variant='secondary'
-                  className='w-full'
-                  disabled={isBusy}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {isBusy ? (
-                    <LoaderCircle className='size-4 animate-spin' />
-                  ) : (
-                    <Upload className='size-4' />
-                  )}
-                  Choose file…
-                </Button>
-              </div>
-
-              {bookTitle ? (
-                <p className='font-medium text-sm leading-snug'>{bookTitle}</p>
-              ) : null}
-
-              {error ? (
-                <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm'>
-                  {error}
+          <div className='grid min-w-0 gap-4 lg:self-start'>
+            <Card className='min-w-0 shadow-sm backdrop-blur'>
+              <CardHeader className='space-y-1'>
+                <CardTitle className='flex items-center gap-2 text-base'>
+                  <BookOpen className='size-4 text-muted-foreground' />
+                  Library
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='grid gap-4 pt-4'>
+                <input
+                  ref={fileInputRef}
+                  type='file'
+                  accept='.epub,application/epub+zip'
+                  className='sr-only'
+                  aria-label='Choose EPUB file'
+                  onChange={(event) => {
+                    const next = event.target.files?.[0];
+                    void handleFileChange(next);
+                    event.target.value = '';
+                  }}
+                />
+                <div className='space-y-2'>
+                  <Label htmlFor='epub-file-trigger'>EPUB file</Label>
+                  <Button
+                    id='epub-file-trigger'
+                    type='button'
+                    variant='secondary'
+                    className='w-full'
+                    disabled={isBusy}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isBusy ? (
+                      <LoaderCircle className='size-4 animate-spin' />
+                    ) : (
+                      <Upload className='size-4' />
+                    )}
+                    Choose file…
+                  </Button>
                 </div>
-              ) : null}
 
-              <div className='max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]'>
-                {chapters.length === 0 ? (
-                  <p className='p-3 text-muted-foreground text-sm'>
-                    No chapters yet. Choose an EPUB to list its spine or table
-                    of contents.
+                {bookTitle ? (
+                  <p className='font-medium text-sm leading-snug'>
+                    {bookTitle}
                   </p>
-                ) : (
-                  <ul className='divide-y'>
-                    {chapters.map((item) => {
-                      const isInCurrentChapter = activeChapter?.id === item.id;
-                      const ItemIcon = isInCurrentChapter ? Section : FileText;
+                ) : null}
 
-                      return (
-                        <li key={chapterListItemKey(item)}>
-                          <button
-                            type='button'
-                            className='flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60'
-                            style={{
-                              paddingLeft:
-                                item.kind === 'toc'
-                                  ? `${12 + item.depth * 12}px`
-                                  : undefined,
-                            }}
-                            onClick={() => {
-                              void onPickChapter(item);
-                            }}
-                          >
-                            <ItemIcon
-                              className='mt-0.5 size-4 shrink-0 text-muted-foreground'
-                              aria-hidden='true'
-                            />
-                            <span className='leading-snug'>{item.label}</span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                {error ? (
+                  <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm'>
+                    {error}
+                  </div>
+                ) : null}
+
+                <div className='max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]'>
+                  {chapters.length === 0 ? (
+                    <p className='p-3 text-muted-foreground text-sm'>
+                      No chapters yet. Choose an EPUB to list its spine or table
+                      of contents.
+                    </p>
+                  ) : (
+                    <ul className='divide-y'>
+                      {chapters.map((item) => {
+                        const isInCurrentChapter =
+                          activeChapter?.id === item.id;
+                        const ItemIcon = isInCurrentChapter
+                          ? Section
+                          : FileText;
+
+                        return (
+                          <li key={chapterListItemKey(item)}>
+                            <button
+                              type='button'
+                              className='flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60'
+                              style={{
+                                paddingLeft:
+                                  item.kind === 'toc'
+                                    ? `${12 + item.depth * 12}px`
+                                    : undefined,
+                              }}
+                              onClick={() => {
+                                void onPickChapter(item);
+                              }}
+                            >
+                              <ItemIcon
+                                className='mt-0.5 size-4 shrink-0 text-muted-foreground'
+                                aria-hidden='true'
+                              />
+                              <span className='leading-snug'>{item.label}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className='min-w-0 shadow-sm backdrop-blur'>
+              <CardHeader className='space-y-1'>
+                <CardTitle className='flex items-center gap-2 text-base'>
+                  <AudioLinesIcon className='size-4 text-muted-foreground' />
+                  Narration
+                </CardTitle>
+              </CardHeader>
+              <CardContent className='grid gap-4 pt-4'>
+                <div className='grid gap-3'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='epub-narration-scope'>Scope</Label>
+                    <Select
+                      value={narrationScope}
+                      onValueChange={(value) =>
+                        setNarrationScope(value as NarrationScope)
+                      }
+                    >
+                      <SelectTrigger
+                        id='epub-narration-scope'
+                        className='w-full'
+                        aria-label='Narration scope'
+                      >
+                        <SelectValue placeholder='Current chapter' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='chapter'>Current chapter</SelectItem>
+                        <SelectItem
+                          value='section'
+                          disabled={sectionScopeUnavailable}
+                        >
+                          Current section
+                        </SelectItem>
+                        <SelectItem value='selection'>Selected text</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className='space-y-2'>
+                    <Label htmlFor='epub-voice-select'>Voice</Label>
+                    <Select
+                      value={narrationStyle}
+                      onValueChange={(value) => setNarrationStyle(value ?? '')}
+                    >
+                      <SelectTrigger
+                        id='epub-voice-select'
+                        className='w-full'
+                        aria-label='Narration voice'
+                      >
+                        <SelectValue placeholder='af_heart' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VOICE_OPTIONS.map((voice) => (
+                          <SelectItem key={voice.value} value={voice.value}>
+                            {voice.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className='space-y-3'>
+                    <div className='flex items-center justify-between gap-3'>
+                      <Label htmlFor='epub-speed-slider'>Speed</Label>
+                      <span className='text-muted-foreground text-xs'>
+                        {formatSpeedLabel(narrationSpeed)}
+                      </span>
+                    </div>
+                    <Slider
+                      id='epub-speed-slider'
+                      min={0.7}
+                      max={1.4}
+                      step={0.05}
+                      value={[narrationSpeed]}
+                      onValueChange={(value) => {
+                        setNarrationSpeed(
+                          Array.isArray(value) ? (value[0] ?? 1) : value,
+                        );
+                      }}
+                      aria-label='Narration speed'
+                    />
+                  </div>
+
+                  <div className='flex items-center justify-between gap-3 rounded-md border px-3 py-2'>
+                    <Label htmlFor='epub-save-audio'>Save streamed WAV</Label>
+                    <Switch
+                      id='epub-save-audio'
+                      checked={saveNarrationToDisk}
+                      onCheckedChange={setSaveNarrationToDisk}
+                      aria-label='Save streamed narration to disk'
+                    />
+                  </div>
+                </div>
+
+                {narrationError ? (
+                  <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm'>
+                    {narrationError}
+                  </div>
+                ) : null}
+
+                {narrationStatus ? (
+                  <p className='break-words text-muted-foreground text-xs leading-5'>
+                    {narrationStatus}
+                    {timestampCount > 0
+                      ? ` · ${timestampCount} words timed`
+                      : ''}
+                  </p>
+                ) : null}
+
+                <div className='grid gap-2'>
+                  <Button
+                    type='button'
+                    className='w-full'
+                    onClick={() => void handleReadAloud()}
+                    disabled={!activeChapter || isNarrationBusy}
+                  >
+                    {isReadingAloud ? (
+                      <LoaderCircle className='size-4 animate-spin' />
+                    ) : (
+                      <Play className='size-4' />
+                    )}
+                    {isReadingAloud ? 'Reading…' : 'Read aloud'}
+                  </Button>
+
+                  <Button
+                    type='button'
+                    variant='secondary'
+                    className='w-full'
+                    onClick={() => void handleGenerateFile()}
+                    disabled={!activeChapter || isNarrationBusy}
+                  >
+                    {isGeneratingFile ? (
+                      <LoaderCircle className='size-4 animate-spin' />
+                    ) : (
+                      <Download className='size-4' />
+                    )}
+                    {isGeneratingFile ? 'Generating…' : 'Generate file'}
+                  </Button>
+                </div>
+
+                <div className='grid gap-2'>
+                  {/* biome-ignore lint/a11y/useMediaCaption: Generated narration does not have captions yet. */}
+                  <audio
+                    ref={audioRef}
+                    controls
+                    preload='auto'
+                    src={audioUrl || undefined}
+                    aria-label='EPUB narration preview'
+                    className='h-10 w-full'
+                  />
+                  <Button
+                    type='button'
+                    variant='outline'
+                    className='w-full'
+                    onClick={playNarration}
+                    disabled={!audioUrl || isNarrationBusy}
+                  >
+                    <FileAudio className='size-4' />
+                    Play again
+                  </Button>
+                  {savedOutputPath ? (
+                    <p className='wrap-break-word text-muted-foreground text-xs leading-5'>
+                      {savedOutputPath}
+                    </p>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card className='min-w-0 border-border/70 shadow-sm backdrop-blur'>
             <CardHeader>
               <CardTitle className='text-base'>Reading pane</CardTitle>
             </CardHeader>
-            <CardContent className='min-w-0'>
-              <div className='overflow-hidden rounded-lg border'>
+            <CardContent className='min-w-0 grow'>
+              <div className='overflow-hidden rounded-lg h-full bg-background'>
                 <iframe
                   ref={iframeRef}
                   title='EPUB chapter'
-                  className='h-[clamp(260px,62dvh,640px)] w-full border-0 bg-background lg:h-[clamp(260px,70dvh,640px)]'
+                  className='grow h-full flex-1 w-full border-0 bg-background'
                   sandbox='allow-same-origin'
                   srcDoc={readerSrcDoc}
                   style={{ colorScheme: readerTheme.colorScheme }}

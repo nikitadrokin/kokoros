@@ -37,6 +37,8 @@ struct SynthesizeSpeechRequest {
     model_path: Option<String>,
     data_path: Option<String>,
     output_path: Option<String>,
+    output_label: Option<String>,
+    output_subdir: Option<String>,
     save_to_disk: Option<bool>,
     initial_silence: Option<usize>,
     mono: bool,
@@ -166,7 +168,11 @@ async fn synthesize_speech(
     let output_path = if let Some(path) = requested_output_path {
         resolve_output_path(&app, path)?
     } else if save_to_disk {
-        create_saved_output_path(&app)?
+        create_saved_output_path(
+            &app,
+            request.output_label.as_deref(),
+            request.output_subdir.as_deref(),
+        )?
     } else {
         create_temp_output_path(&app)?
     };
@@ -327,7 +333,11 @@ async fn synthesize_speech_stream(
     let output_path = if let Some(path) = requested_output_path {
         Some(resolve_output_path(&app, path)?)
     } else if save_to_disk {
-        Some(create_saved_output_path(&app)?)
+        Some(create_saved_output_path(
+            &app,
+            request.output_label.as_deref(),
+            request.output_subdir.as_deref(),
+        )?)
     } else {
         None
     };
@@ -467,10 +477,32 @@ fn list_saved_audio(app: AppHandle) -> Result<Vec<SavedAudioFile>, String> {
     }
 
     let mut files = Vec::new();
-    for entry in fs::read_dir(&base_dir).map_err(|error| error.to_string())? {
+    collect_saved_audio_files(&base_dir, &base_dir, &mut files)?;
+
+    files.sort_by(|left, right| {
+        right
+            .modified_sec
+            .cmp(&left.modified_sec)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    Ok(files)
+}
+
+fn collect_saved_audio_files(
+    base_dir: &Path,
+    current_dir: &Path,
+    files: &mut Vec<SavedAudioFile>,
+) -> Result<(), String> {
+    for entry in fs::read_dir(current_dir).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
         let metadata = entry.metadata().map_err(|error| error.to_string())?;
+
+        if metadata.is_dir() {
+            collect_saved_audio_files(base_dir, &path, files)?;
+            continue;
+        }
 
         if !metadata.is_file() || path.extension().and_then(|value| value.to_str()) != Some("wav") {
             continue;
@@ -482,9 +514,10 @@ fn list_saved_audio(app: AppHandle) -> Result<Vec<SavedAudioFile>, String> {
             .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
             .map(|value| value.as_secs());
         let name = path
-            .file_name()
-            .map(|value| value.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.display().to_string());
+            .strip_prefix(base_dir)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
 
         files.push(SavedAudioFile {
             name,
@@ -494,14 +527,7 @@ fn list_saved_audio(app: AppHandle) -> Result<Vec<SavedAudioFile>, String> {
         });
     }
 
-    files.sort_by(|left, right| {
-        right
-            .modified_sec
-            .cmp(&left.modified_sec)
-            .then_with(|| left.name.cmp(&right.name))
-    });
-
-    Ok(files)
+    Ok(())
 }
 
 #[tauri::command]
@@ -717,16 +743,27 @@ fn create_temp_output_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(base_dir.join(format!("speech-{}-{timestamp}.wav", std::process::id())))
 }
 
-fn create_saved_output_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn create_saved_output_path(
+    app: &AppHandle,
+    output_label: Option<&str>,
+    output_subdir: Option<&str>,
+) -> Result<PathBuf, String> {
     let base_dir = saved_audio_dir(app)?;
+    let base_dir = match output_subdir {
+        Some(value) => base_dir.join(sanitize_output_subdir(value)?),
+        None => base_dir,
+    };
     fs::create_dir_all(&base_dir).map_err(|error| error.to_string())?;
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| error.to_string())?
         .as_nanos();
+    let stem = output_label
+        .map(|value| sanitize_filename_stem(value, "speech"))
+        .unwrap_or_else(|| "speech".to_string());
 
-    Ok(base_dir.join(format!("speech-{}-{timestamp}.wav", std::process::id())))
+    Ok(base_dir.join(format!("{stem}-{}-{timestamp}.wav", std::process::id())))
 }
 
 fn saved_audio_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -734,6 +771,66 @@ fn saved_audio_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .app_data_dir()
         .map(|dir| dir.join("synthesis"))
         .map_err(|error| error.to_string())
+}
+
+fn sanitize_output_subdir(input: &str) -> Result<PathBuf, String> {
+    let mut path = PathBuf::new();
+
+    for part in input.split(['/', '\\']) {
+        let part = part.trim();
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            return Err("Saved audio folder cannot include parent directory segments.".to_string());
+        }
+        path.push(sanitize_filename_stem(part, "audio"));
+    }
+
+    Ok(path)
+}
+
+fn sanitize_filename_stem(input: &str, fallback: &str) -> String {
+    let mut output = String::with_capacity(input.len().min(96));
+    let mut last_was_separator = false;
+
+    for character in input.chars() {
+        let next = if character.is_ascii_alphanumeric() {
+            Some(character)
+        } else if matches!(character, ' ' | '-' | '_' | '.') {
+            Some(character)
+        } else {
+            Some(' ')
+        };
+
+        if let Some(character) = next {
+            let is_separator = character.is_ascii_whitespace() || character == '-';
+            if is_separator && last_was_separator {
+                continue;
+            }
+
+            if output.len() >= 96 {
+                break;
+            }
+
+            output.push(if character.is_ascii_whitespace() {
+                '-'
+            } else {
+                character
+            });
+            last_was_separator = is_separator;
+        }
+    }
+
+    let sanitized = output
+        .trim_matches(|character| matches!(character, '-' | '_' | '.' | ' '))
+        .to_string();
+
+    if sanitized.is_empty() {
+        fallback.to_string()
+    } else {
+        sanitized
+    }
 }
 
 fn resolve_saved_audio_path(base_dir: &Path, input: &str) -> Result<PathBuf, String> {

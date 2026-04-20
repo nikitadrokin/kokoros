@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import {
   AudioLinesIcon,
   Check,
@@ -24,99 +23,16 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
+import { VOICE_OPTIONS } from '@/lib/voice-options';
 
 export const Route = createFileRoute('/')({ component: PlaygroundPage });
-
-const VOICE_OPTIONS = [
-  { value: 'af_heart', label: 'af_heart' },
-  { value: 'af_sky', label: 'af_sky' },
-  { value: 'af_nicole', label: 'af_nicole' },
-  { value: 'af_sarah', label: 'af_sarah' },
-];
-
-const SPEECH_STREAM_CHUNK_EVENT = 'speech-stream-chunk';
-const FLOAT_SAMPLE_BYTES = 4;
-const WAV_HEADER_BYTES = 44;
-const WEB_AUDIO_START_DELAY_SEC = 0.08;
-const WEB_AUDIO_MIN_LEAD_SEC = 0.02;
-
-type SynthesizeSpeechStreamResponse = {
-  sampleRate: number;
-  channels: number;
-  savedOutputPath: string | null;
-};
-
-type SpeechStreamChunkEvent = {
-  streamId: string;
-  audioBase64: string;
-  sampleRate: number;
-  channels: number;
-  sampleFormat: 'float32le';
-};
 
 type SavedAudioFile = {
   name: string;
   path: string;
   modifiedSec: number | null;
   sizeBytes: number;
-};
-
-const base64ToBytes = (base64: string) => {
-  const decoded = window.atob(base64);
-  return Uint8Array.from(decoded, (char) => char.charCodeAt(0));
-};
-
-const writeAscii = (view: DataView, offset: number, value: string) => {
-  for (let index = 0; index < value.length; index += 1) {
-    view.setUint8(offset + index, value.charCodeAt(index));
-  }
-};
-
-const createFloatWavBlobUrl = (
-  audioChunks: Uint8Array[],
-  sampleRate: number,
-  channels: number,
-) => {
-  const dataBytes = audioChunks.reduce(
-    (totalBytes, chunk) => totalBytes + chunk.byteLength,
-    0,
-  );
-  const wavBytes = new Uint8Array(WAV_HEADER_BYTES + dataBytes);
-  const view = new DataView(wavBytes.buffer);
-  const blockAlign = channels * FLOAT_SAMPLE_BYTES;
-  const byteRate = sampleRate * blockAlign;
-
-  writeAscii(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataBytes, true);
-  writeAscii(view, 8, 'WAVE');
-  writeAscii(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 3, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 32, true);
-  writeAscii(view, 36, 'data');
-  view.setUint32(40, dataBytes, true);
-
-  let offset = WAV_HEADER_BYTES;
-  for (const chunk of audioChunks) {
-    wavBytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-
-  return URL.createObjectURL(new Blob([wavBytes], { type: 'audio/wav' }));
-};
-
-const createStreamId = () =>
-  globalThis.crypto?.randomUUID?.() ??
-  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-
-const revokeBlobUrl = (url: string) => {
-  if (url.startsWith('blob:')) {
-    URL.revokeObjectURL(url);
-  }
 };
 
 const formatFileSize = (bytes: number) => {
@@ -145,103 +61,28 @@ const formatModifiedTime = (modifiedSec: number | null) => {
 
 function PlaygroundPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const activeStreamIdRef = useRef('');
   const deleteConfirmationTimeoutRef = useRef<number | null>(null);
-  const nextPlayTimeRef = useRef(0);
-  const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([]);
-  const streamCleanupRef = useRef<(() => void) | null>(null);
   const [text, setText] = useState(
     'Hello from Kokoros. Generate speech here, then play it immediately in the app.',
   );
   const [style, setStyle] = useState('af_heart');
-  const [audioUrl, setAudioUrl] = useState('');
   const [saveToDisk, setSaveToDisk] = useState(true);
-  const [savedOutputPath, setSavedOutputPath] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingSavedAudio, setIsLoadingSavedAudio] = useState(false);
   const [deletingAudioPath, setDeletingAudioPath] = useState('');
   const [pendingDeletePath, setPendingDeletePath] = useState('');
   const [savedAudioFiles, setSavedAudioFiles] = useState<SavedAudioFile[]>([]);
-  const [error, setError] = useState('');
   const [savedAudioError, setSavedAudioError] = useState('');
-
-  const stopScheduledAudio = useCallback(() => {
-    for (const source of scheduledSourcesRef.current) {
-      try {
-        source.stop();
-      } catch {
-        // Source nodes throw if they already ended; either state is fine here.
-      }
-    }
-    scheduledSourcesRef.current = [];
-    nextPlayTimeRef.current = 0;
-  }, []);
-
-  const scheduleStreamChunk = useCallback(
-    (bytes: Uint8Array, sampleRate: number, channels: number) => {
-      const audioContext = audioContextRef.current;
-      if (!audioContext || bytes.byteLength === 0) {
-        return;
-      }
-
-      const sampleCount = bytes.byteLength / FLOAT_SAMPLE_BYTES;
-      const frameCount = sampleCount / channels;
-      if (
-        !Number.isInteger(sampleCount) ||
-        !Number.isInteger(frameCount) ||
-        frameCount <= 0
-      ) {
-        throw new Error('Received a malformed audio stream chunk.');
-      }
-
-      const sampleBuffer = new ArrayBuffer(bytes.byteLength);
-      new Uint8Array(sampleBuffer).set(bytes);
-      const samples = new Float32Array(sampleBuffer);
-      const audioBuffer = audioContext.createBuffer(
-        channels,
-        frameCount,
-        sampleRate,
-      );
-
-      if (channels === 1) {
-        audioBuffer.copyToChannel(samples, 0);
-      } else {
-        for (let channel = 0; channel < channels; channel += 1) {
-          const channelData = audioBuffer.getChannelData(channel);
-          for (let frame = 0; frame < frameCount; frame += 1) {
-            channelData[frame] = samples[frame * channels + channel];
-          }
-        }
-      }
-
-      const source = audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-      source.onended = () => {
-        scheduledSourcesRef.current = scheduledSourcesRef.current.filter(
-          (scheduledSource) => scheduledSource !== source,
-        );
-      };
-
-      const startAt = Math.max(
-        nextPlayTimeRef.current,
-        audioContext.currentTime + WEB_AUDIO_MIN_LEAD_SEC,
-      );
-      source.start(startAt);
-      scheduledSourcesRef.current.push(source);
-      nextPlayTimeRef.current = startAt + audioBuffer.duration;
-    },
-    [],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (audioUrl) {
-        revokeBlobUrl(audioUrl);
-      }
-    };
-  }, [audioUrl]);
+  const {
+    audioUrl,
+    clearPlayerSource,
+    error,
+    generateStream,
+    isGenerating,
+    play: handlePlay,
+    savedOutputPath,
+    setError,
+    setPlayerSource,
+  } = useSpeechStreamGeneration({ audioRef });
 
   useEffect(() => {
     return () => {
@@ -251,15 +92,6 @@ function PlaygroundPage() {
     };
   }, []);
 
-  useEffect(() => {
-    return () => {
-      streamCleanupRef.current?.();
-      stopScheduledAudio();
-      void audioContextRef.current?.close();
-      audioContextRef.current = null;
-    };
-  }, [stopScheduledAudio]);
-
   const clearDeleteConfirmation = useCallback(() => {
     if (deleteConfirmationTimeoutRef.current !== null) {
       window.clearTimeout(deleteConfirmationTimeoutRef.current);
@@ -267,29 +99,6 @@ function PlaygroundPage() {
     }
     setPendingDeletePath('');
   }, []);
-
-  const setPlayerSource = (nextUrl: string, nextSavedOutputPath: string) => {
-    setSavedOutputPath(nextSavedOutputPath);
-    setAudioUrl((currentUrl) => {
-      if (currentUrl) {
-        revokeBlobUrl(currentUrl);
-      }
-      return nextUrl;
-    });
-  };
-
-  const clearPlayerSource = () => {
-    audioRef.current?.pause();
-    audioRef.current?.removeAttribute('src');
-    audioRef.current?.load();
-    setSavedOutputPath('');
-    setAudioUrl((currentUrl) => {
-      if (currentUrl) {
-        revokeBlobUrl(currentUrl);
-      }
-      return '';
-    });
-  };
 
   const loadSavedAudio = useCallback(async () => {
     setSavedAudioError('');
@@ -314,112 +123,16 @@ function PlaygroundPage() {
   }, [loadSavedAudio]);
 
   const handleGenerate = async () => {
-    if (isGenerating) {
-      return;
+    const response = await generateStream({
+      text,
+      style,
+      saveToDisk,
+      mono: true,
+    });
+
+    if (response?.savedOutputPath) {
+      void loadSavedAudio();
     }
-
-    const streamId = createStreamId();
-    const streamedAudioChunks: Uint8Array[] = [];
-
-    setError('');
-    setIsGenerating(true);
-    activeStreamIdRef.current = streamId;
-    audioRef.current?.pause();
-    stopScheduledAudio();
-    streamCleanupRef.current?.();
-    streamCleanupRef.current = null;
-
-    try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
-      }
-
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-
-      nextPlayTimeRef.current =
-        audioContextRef.current.currentTime + WEB_AUDIO_START_DELAY_SEC;
-
-      const unlistenChunk = await listen<SpeechStreamChunkEvent>(
-        SPEECH_STREAM_CHUNK_EVENT,
-        (event) => {
-          if (event.payload.streamId !== activeStreamIdRef.current) {
-            return;
-          }
-
-          try {
-            if (event.payload.sampleFormat !== 'float32le') {
-              throw new Error(
-                `Unsupported stream format: ${event.payload.sampleFormat}`,
-              );
-            }
-
-            const bytes = base64ToBytes(event.payload.audioBase64);
-            if (!saveToDisk) {
-              streamedAudioChunks.push(bytes);
-            }
-            scheduleStreamChunk(
-              bytes,
-              event.payload.sampleRate,
-              event.payload.channels,
-            );
-          } catch (caughtError) {
-            const message =
-              caughtError instanceof Error
-                ? caughtError.message
-                : String(caughtError);
-            setError(message);
-          }
-        },
-      );
-      streamCleanupRef.current = unlistenChunk;
-
-      const response = await invoke<SynthesizeSpeechStreamResponse>(
-        'synthesize_speech_stream',
-        {
-          request: {
-            text,
-            style,
-            streamId,
-            saveToDisk,
-            mono: true,
-            timestamps: false,
-          },
-        },
-      );
-
-      const nextUrl = response.savedOutputPath
-        ? convertFileSrc(response.savedOutputPath)
-        : createFloatWavBlobUrl(
-            streamedAudioChunks,
-            response.sampleRate,
-            response.channels,
-          );
-
-      setPlayerSource(nextUrl, response.savedOutputPath ?? '');
-
-      if (response.savedOutputPath) {
-        void loadSavedAudio();
-      }
-    } catch (caughtError) {
-      const message =
-        caughtError instanceof Error
-          ? caughtError.message
-          : String(caughtError);
-      setError(message);
-    } finally {
-      if (activeStreamIdRef.current === streamId) {
-        activeStreamIdRef.current = '';
-      }
-      streamCleanupRef.current?.();
-      streamCleanupRef.current = null;
-      setIsGenerating(false);
-    }
-  };
-
-  const handlePlay = () => {
-    audioRef.current?.play().catch(() => undefined);
   };
 
   const handlePlaySavedAudio = (file: SavedAudioFile) => {
