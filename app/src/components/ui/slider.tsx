@@ -19,29 +19,29 @@ function Slider({
   return (
     <SliderPrimitive.Root
       className={cn('data-vertical:h-full data-horizontal:w-full', className)}
-      data-slot='slider'
+      data-slot="slider"
       defaultValue={defaultValue}
       value={value}
       min={min}
       max={max}
-      thumbAlignment='edge'
+      thumbAlignment="edge"
       {...props}
     >
-      <SliderPrimitive.Control className='relative flex w-full touch-none select-none items-center data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col data-disabled:opacity-50'>
+      <SliderPrimitive.Control className="relative flex w-full touch-none select-none items-center data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col data-disabled:opacity-50">
         <SliderPrimitive.Track
-          data-slot='slider-track'
-          className='relative grow select-none overflow-hidden rounded-full bg-input/90 data-horizontal:h-2 data-vertical:h-full data-horizontal:w-full data-vertical:w-2'
+          data-slot="slider-track"
+          className="relative h-2 w-full grow select-none overflow-hidden rounded-full bg-foreground/15 ring-1 ring-border/70 data-vertical:h-full data-vertical:w-2 dark:bg-foreground/20"
         >
           <SliderPrimitive.Indicator
-            data-slot='slider-range'
-            className='select-none bg-primary data-horizontal:h-full data-vertical:w-full'
+            data-slot="slider-range"
+            className="h-full select-none bg-primary data-vertical:w-full"
           />
         </SliderPrimitive.Track>
-        {Array.from({ length: _values.length }, (_, index) => (
+        {_values.map((thumbValue) => (
           <SliderPrimitive.Thumb
-            data-slot='slider-thumb'
-            key={index}
-            className='block h-4 w-6 shrink-0 select-none rounded-full bg-white not-dark:bg-clip-padding shadow-md ring-1 ring-black/10 transition-[color,box-shadow,background-color] hover:ring-4 hover:ring-ring/30 focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 data-vertical:h-6 data-vertical:w-4'
+            data-slot="slider-thumb"
+            key={`slider-thumb-${thumbValue}`}
+            className="block h-4 w-6 shrink-0 select-none rounded-full bg-white not-dark:bg-clip-padding shadow-md ring-1 ring-black/10 transition-[color,box-shadow,background-color] hover:ring-4 hover:ring-ring/30 focus-visible:outline-hidden focus-visible:ring-4 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 data-vertical:h-6 data-vertical:w-4"
           />
         ))}
       </SliderPrimitive.Control>
