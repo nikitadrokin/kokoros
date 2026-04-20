@@ -40,7 +40,13 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Tabs,
+  TabsContent,
+  TabsIndicator,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
 import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
 import {
   extractSelectedSpeechText,
@@ -762,6 +768,7 @@ function EpubReaderPage() {
                 <AudioLinesIcon className="size-4" aria-hidden="true" />
                 Narration
               </TabsTrigger>
+              <TabsIndicator />
             </TabsList>
 
             <TabsContent value="library" className="min-w-0">
