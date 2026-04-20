@@ -53,6 +53,7 @@ import {
   extractSpeechTextFromChapterHtml,
 } from '@/lib/epub-speech';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
+import rawReaderDocumentCss from './epub-reader.css?raw';
 
 export const Route = createFileRoute('/epub')({ component: EpubReaderPage });
 
@@ -109,6 +110,17 @@ const DEFAULT_READER_THEME: ReaderTheme = {
   fontFamily: '"Geist Variable", sans-serif',
   colorScheme: 'light',
 };
+
+const readerDocumentCss = rawReaderDocumentCss
+  .replaceAll(
+    '__GEIST_CYRILLIC_FONT_URL__',
+    JSON.stringify(geistCyrillicFontUrl),
+  )
+  .replaceAll(
+    '__GEIST_LATIN_EXT_FONT_URL__',
+    JSON.stringify(geistLatinExtFontUrl),
+  )
+  .replaceAll('__GEIST_LATIN_FONT_URL__', JSON.stringify(geistLatinFontUrl));
 
 /**
  * Flattens NCX nav points into rows with manifest ids for `loadChapter`.
@@ -302,125 +314,7 @@ function readerCriticalStyle(theme: ReaderTheme): string {
 }
 
 function readerDocumentStyle(theme: ReaderTheme): string {
-  return `<style>
-@font-face {
-	font-display: swap;
-	font-family: "Geist Variable";
-	font-style: normal;
-	font-weight: 100 900;
-	src: url(${JSON.stringify(geistCyrillicFontUrl)}) format("woff2-variations");
-	unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
-}
-
-@font-face {
-	font-display: swap;
-	font-family: "Geist Variable";
-	font-style: normal;
-	font-weight: 100 900;
-	src: url(${JSON.stringify(geistLatinExtFontUrl)}) format("woff2-variations");
-	unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
-}
-
-@font-face {
-	font-display: swap;
-	font-family: "Geist Variable";
-	font-style: normal;
-	font-weight: 100 900;
-	src: url(${JSON.stringify(geistLatinFontUrl)}) format("woff2-variations");
-	unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
-}
-
-${readerThemeCss(theme)}
-
-body {
-	box-sizing: border-box;
-	margin: 0 !important;
-	padding: clamp(1rem, 3vw, 2.5rem) !important;
-	color: var(--epub-reader-foreground) !important;
-	font-family: var(--epub-reader-font-family) !important;
-	font-size: 16px !important;
-	font-synthesis-weight: none;
-	line-height: 1.7 !important;
-	text-rendering: optimizeLegibility;
-	-webkit-font-smoothing: antialiased;
-}
-
-*,
-*::before,
-*::after {
-	box-sizing: border-box;
-}
-
-body > * {
-	max-width: 72ch;
-	margin-inline: auto;
-}
-
-:where(
-	body,
-	p,
-	li,
-	dd,
-	dt,
-	blockquote,
-	div,
-	section,
-	article,
-	aside,
-	header,
-	footer,
-	span,
-	a,
-	td,
-	th,
-	caption,
-	figcaption,
-	h1,
-	h2,
-	h3,
-	h4,
-	h5,
-	h6
-) {
-	color: var(--epub-reader-foreground) !important;
-	font-family: var(--epub-reader-font-family) !important;
-}
-
-:where(p, li, dd, blockquote) {
-	line-height: 1.75 !important;
-}
-
-:where(h1, h2, h3, h4, h5, h6) {
-	font-weight: 650 !important;
-	letter-spacing: 0 !important;
-	line-height: 1.2 !important;
-}
-
-a {
-	text-decoration-color: var(--epub-reader-muted-foreground) !important;
-	text-underline-offset: 0.15em;
-}
-
-:where(blockquote) {
-	border-inline-start: 3px solid var(--epub-reader-border);
-	margin-inline: 0;
-	padding-inline-start: 1rem;
-}
-
-:where(img, svg, video, canvas) {
-	max-width: 100%;
-	height: auto;
-}
-
-:where(table) {
-	max-width: 100%;
-	border-collapse: collapse;
-}
-
-:where(code, kbd, pre, samp) {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
-}
-</style>`;
+  return `<style>${readerThemeCss(theme)}${readerDocumentCss}</style>`;
 }
 
 function emptyReaderDocument(theme: ReaderTheme): string {
