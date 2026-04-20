@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
 import {
   extractSelectedSpeechText,
@@ -733,298 +734,324 @@ function EpubReaderPage() {
   const isNarrationBusy = isReadingAloud || isGeneratingFile;
 
   return (
-    <main className='min-h-[calc(100vh-4.5rem)] p-4 md:p-6'>
-      <div className='mx-auto flex w-full max-w-6xl flex-col gap-4'>
-        <div className='pb-2'>
-          <div className='space-y-1'>
-            <h1 className='font-semibold text-2xl tracking-tight'>
+    <main className="min-h-[calc(100vh-4.5rem)] p-4 md:p-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        <div className="pb-2">
+          <div className="space-y-1">
+            <h1 className="font-semibold text-2xl tracking-tight">
               EPUB reader
             </h1>
-            <p className='max-w-2xl text-muted-foreground text-sm'>
+            <p className="max-w-2xl text-muted-foreground text-sm">
               Open an EPUB, browse the table of contents, and read chapters
               inline.
             </p>
           </div>
         </div>
 
-        <div className='grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]'>
-          <div className='grid min-w-0 gap-4 lg:self-start'>
-            <Card className='min-w-0 shadow-sm backdrop-blur'>
-              <CardHeader className='space-y-1'>
-                <CardTitle className='flex items-center gap-2 text-base'>
-                  <BookOpen className='size-4 text-muted-foreground' />
-                  Library
-                </CardTitle>
-              </CardHeader>
-              <CardContent className='grid gap-4 pt-4'>
-                <input
-                  ref={fileInputRef}
-                  type='file'
-                  accept='.epub,application/epub+zip'
-                  className='sr-only'
-                  aria-label='Choose EPUB file'
-                  onChange={(event) => {
-                    const next = event.target.files?.[0];
-                    void handleFileChange(next);
-                    event.target.value = '';
-                  }}
-                />
-                <div className='space-y-2'>
-                  <Label htmlFor='epub-file-trigger'>EPUB file</Label>
-                  <Button
-                    id='epub-file-trigger'
-                    type='button'
-                    variant='secondary'
-                    className='w-full'
-                    disabled={isBusy}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    {isBusy ? (
-                      <LoaderCircle className='size-4 animate-spin' />
-                    ) : (
-                      <Upload className='size-4' />
-                    )}
-                    Choose file…
-                  </Button>
-                </div>
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
+          <Tabs
+            defaultValue="library"
+            className="flex min-w-0 flex-col gap-3 lg:self-start"
+          >
+            <TabsList className="grid h-9 w-full grid-cols-2">
+              <TabsTrigger value="library" className="h-7">
+                <BookOpen className="size-4" aria-hidden="true" />
+                Library
+              </TabsTrigger>
+              <TabsTrigger value="narration" className="h-7">
+                <AudioLinesIcon className="size-4" aria-hidden="true" />
+                Narration
+              </TabsTrigger>
+            </TabsList>
 
-                {bookTitle ? (
-                  <p className='font-medium text-sm leading-snug'>
-                    {bookTitle}
-                  </p>
-                ) : null}
-
-                {error ? (
-                  <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm'>
-                    {error}
-                  </div>
-                ) : null}
-
-                <div className='max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]'>
-                  {chapters.length === 0 ? (
-                    <p className='p-3 text-muted-foreground text-sm'>
-                      No chapters yet. Choose an EPUB to list its spine or table
-                      of contents.
-                    </p>
-                  ) : (
-                    <ul className='divide-y'>
-                      {chapters.map((item) => {
-                        const isInCurrentChapter =
-                          activeChapter?.id === item.id;
-                        const ItemIcon = isInCurrentChapter
-                          ? Section
-                          : FileText;
-
-                        return (
-                          <li key={chapterListItemKey(item)}>
-                            <button
-                              type='button'
-                              className='flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60'
-                              style={{
-                                paddingLeft:
-                                  item.kind === 'toc'
-                                    ? `${12 + item.depth * 12}px`
-                                    : undefined,
-                              }}
-                              onClick={() => {
-                                void onPickChapter(item);
-                              }}
-                            >
-                              <ItemIcon
-                                className='mt-0.5 size-4 shrink-0 text-muted-foreground'
-                                aria-hidden='true'
-                              />
-                              <span className='leading-snug'>{item.label}</span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className='min-w-0 shadow-sm backdrop-blur'>
-              <CardHeader className='space-y-1'>
-                <CardTitle className='flex items-center gap-2 text-base'>
-                  <AudioLinesIcon className='size-4 text-muted-foreground' />
-                  Narration
-                </CardTitle>
-              </CardHeader>
-              <CardContent className='grid gap-4 pt-4'>
-                <div className='grid gap-3'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='epub-narration-scope'>Scope</Label>
-                    <Select
-                      value={narrationScope}
-                      onValueChange={(value) =>
-                        setNarrationScope(value as NarrationScope)
-                      }
-                    >
-                      <SelectTrigger
-                        id='epub-narration-scope'
-                        className='w-full'
-                        aria-label='Narration scope'
-                      >
-                        <SelectValue placeholder='Current chapter' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='chapter'>Current chapter</SelectItem>
-                        <SelectItem
-                          value='section'
-                          disabled={sectionScopeUnavailable}
-                        >
-                          Current section
-                        </SelectItem>
-                        <SelectItem value='selection'>Selected text</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className='space-y-2'>
-                    <Label htmlFor='epub-voice-select'>Voice</Label>
-                    <Select
-                      value={narrationStyle}
-                      onValueChange={(value) => setNarrationStyle(value ?? '')}
-                    >
-                      <SelectTrigger
-                        id='epub-voice-select'
-                        className='w-full'
-                        aria-label='Narration voice'
-                      >
-                        <SelectValue placeholder='af_heart' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {VOICE_OPTIONS.map((voice) => (
-                          <SelectItem key={voice.value} value={voice.value}>
-                            {voice.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className='space-y-3'>
-                    <div className='flex items-center justify-between gap-3'>
-                      <Label htmlFor='epub-speed-slider'>Speed</Label>
-                      <span className='text-muted-foreground text-xs'>
-                        {formatSpeedLabel(narrationSpeed)}
-                      </span>
-                    </div>
-                    <Slider
-                      id='epub-speed-slider'
-                      min={0.7}
-                      max={1.4}
-                      step={0.05}
-                      value={[narrationSpeed]}
-                      onValueChange={(value) => {
-                        setNarrationSpeed(
-                          Array.isArray(value) ? (value[0] ?? 1) : value,
-                        );
-                      }}
-                      aria-label='Narration speed'
-                    />
-                  </div>
-
-                  <div className='flex items-center justify-between gap-3 rounded-md border px-3 py-2'>
-                    <Label htmlFor='epub-save-audio'>Save streamed WAV</Label>
-                    <Switch
-                      id='epub-save-audio'
-                      checked={saveNarrationToDisk}
-                      onCheckedChange={setSaveNarrationToDisk}
-                      aria-label='Save streamed narration to disk'
-                    />
-                  </div>
-                </div>
-
-                {narrationError ? (
-                  <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm'>
-                    {narrationError}
-                  </div>
-                ) : null}
-
-                {narrationStatus ? (
-                  <p className='break-words text-muted-foreground text-xs leading-5'>
-                    {narrationStatus}
-                    {timestampCount > 0
-                      ? ` · ${timestampCount} words timed`
-                      : ''}
-                  </p>
-                ) : null}
-
-                <div className='grid gap-2'>
-                  <Button
-                    type='button'
-                    className='w-full'
-                    onClick={() => void handleReadAloud()}
-                    disabled={!activeChapter || isNarrationBusy}
-                  >
-                    {isReadingAloud ? (
-                      <LoaderCircle className='size-4 animate-spin' />
-                    ) : (
-                      <Play className='size-4' />
-                    )}
-                    {isReadingAloud ? 'Reading…' : 'Read aloud'}
-                  </Button>
-
-                  <Button
-                    type='button'
-                    variant='secondary'
-                    className='w-full'
-                    onClick={() => void handleGenerateFile()}
-                    disabled={!activeChapter || isNarrationBusy}
-                  >
-                    {isGeneratingFile ? (
-                      <LoaderCircle className='size-4 animate-spin' />
-                    ) : (
-                      <Download className='size-4' />
-                    )}
-                    {isGeneratingFile ? 'Generating…' : 'Generate file'}
-                  </Button>
-                </div>
-
-                <div className='grid gap-2'>
-                  {/* biome-ignore lint/a11y/useMediaCaption: Generated narration does not have captions yet. */}
-                  <audio
-                    ref={audioRef}
-                    controls
-                    preload='auto'
-                    src={audioUrl || undefined}
-                    aria-label='EPUB narration preview'
-                    className='h-10 w-full'
+            <TabsContent value="library" className="min-w-0">
+              <Card className="min-w-0 shadow-sm backdrop-blur">
+                <CardHeader className="space-y-1">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <BookOpen className="size-4 text-muted-foreground" />
+                    Library
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 pt-4">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".epub,application/epub+zip"
+                    className="sr-only"
+                    aria-label="Choose EPUB file"
+                    onChange={(event) => {
+                      const next = event.target.files?.[0];
+                      void handleFileChange(next);
+                      event.target.value = '';
+                    }}
                   />
-                  <Button
-                    type='button'
-                    variant='outline'
-                    className='w-full'
-                    onClick={playNarration}
-                    disabled={!audioUrl || isNarrationBusy}
-                  >
-                    <FileAudio className='size-4' />
-                    Play again
-                  </Button>
-                  {savedOutputPath ? (
-                    <p className='wrap-break-word text-muted-foreground text-xs leading-5'>
-                      {savedOutputPath}
+                  <div className="space-y-2">
+                    <Label htmlFor="epub-file-trigger">EPUB file</Label>
+                    <Button
+                      id="epub-file-trigger"
+                      type="button"
+                      variant="secondary"
+                      className="w-full"
+                      disabled={isBusy}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {isBusy ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : (
+                        <Upload className="size-4" />
+                      )}
+                      Choose file…
+                    </Button>
+                  </div>
+
+                  {bookTitle ? (
+                    <p className="font-medium text-sm leading-snug">
+                      {bookTitle}
                     </p>
                   ) : null}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
 
-          <Card className='min-w-0 border-border/70 shadow-sm backdrop-blur'>
+                  {error ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
+                      {error}
+                    </div>
+                  ) : null}
+
+                  <div className="max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]">
+                    {chapters.length === 0 ? (
+                      <p className="p-3 text-muted-foreground text-sm">
+                        No chapters yet. Choose an EPUB to list its spine or
+                        table of contents.
+                      </p>
+                    ) : (
+                      <ul className="divide-y">
+                        {chapters.map((item) => {
+                          const isInCurrentChapter =
+                            activeChapter?.id === item.id;
+                          const ItemIcon = isInCurrentChapter
+                            ? Section
+                            : FileText;
+
+                          return (
+                            <li key={chapterListItemKey(item)}>
+                              <button
+                                type="button"
+                                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60"
+                                style={{
+                                  paddingLeft:
+                                    item.kind === 'toc'
+                                      ? `${12 + item.depth * 12}px`
+                                      : undefined,
+                                }}
+                                onClick={() => {
+                                  void onPickChapter(item);
+                                }}
+                              >
+                                <ItemIcon
+                                  className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                                <span className="leading-snug">
+                                  {item.label}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="narration" className="min-w-0">
+              <Card className="min-w-0 shadow-sm backdrop-blur">
+                <CardHeader className="space-y-1">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <AudioLinesIcon className="size-4 text-muted-foreground" />
+                    Narration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 pt-4">
+                  <div className="grid gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="epub-narration-scope">Scope</Label>
+                      <Select
+                        value={narrationScope}
+                        onValueChange={(value) =>
+                          setNarrationScope(value as NarrationScope)
+                        }
+                      >
+                        <SelectTrigger
+                          id="epub-narration-scope"
+                          className="w-full"
+                          aria-label="Narration scope"
+                        >
+                          <SelectValue placeholder="Current chapter" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="chapter">
+                            Current chapter
+                          </SelectItem>
+                          <SelectItem
+                            value="section"
+                            disabled={sectionScopeUnavailable}
+                          >
+                            Current section
+                          </SelectItem>
+                          <SelectItem value="selection">
+                            Selected text
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="epub-voice-select">Voice</Label>
+                      <Select
+                        value={narrationStyle}
+                        onValueChange={(value) =>
+                          setNarrationStyle(value ?? '')
+                        }
+                      >
+                        <SelectTrigger
+                          id="epub-voice-select"
+                          className="w-full"
+                          aria-label="Narration voice"
+                        >
+                          <SelectValue placeholder="af_heart" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VOICE_OPTIONS.map((voice) => (
+                            <SelectItem key={voice.value} value={voice.value}>
+                              {voice.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="epub-speed-slider">Speed</Label>
+                        <span className="text-muted-foreground text-xs">
+                          {formatSpeedLabel(narrationSpeed)}
+                        </span>
+                      </div>
+                      <Slider
+                        id="epub-speed-slider"
+                        min={0.7}
+                        max={1.4}
+                        step={0.05}
+                        value={[narrationSpeed]}
+                        onValueChange={(value) => {
+                          setNarrationSpeed(
+                            Array.isArray(value) ? (value[0] ?? 1) : value,
+                          );
+                        }}
+                        aria-label="Narration speed"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                      <Label htmlFor="epub-save-audio">Save streamed WAV</Label>
+                      <Switch
+                        id="epub-save-audio"
+                        checked={saveNarrationToDisk}
+                        onCheckedChange={setSaveNarrationToDisk}
+                        aria-label="Save streamed narration to disk"
+                      />
+                    </div>
+                  </div>
+
+                  {narrationError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
+                      {narrationError}
+                    </div>
+                  ) : null}
+
+                  {narrationStatus ? (
+                    <p className="break-words text-muted-foreground text-xs leading-5">
+                      {narrationStatus}
+                      {timestampCount > 0
+                        ? ` · ${timestampCount} words timed`
+                        : ''}
+                    </p>
+                  ) : null}
+
+                  <div className="grid gap-2">
+                    <Button
+                      type="button"
+                      className="w-full"
+                      onClick={() => void handleReadAloud()}
+                      disabled={!activeChapter || isNarrationBusy}
+                    >
+                      {isReadingAloud ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : (
+                        <Play className="size-4" />
+                      )}
+                      {isReadingAloud ? 'Reading…' : 'Read aloud'}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full"
+                      onClick={() => void handleGenerateFile()}
+                      disabled={!activeChapter || isNarrationBusy}
+                    >
+                      {isGeneratingFile ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : (
+                        <Download className="size-4" />
+                      )}
+                      {isGeneratingFile ? 'Generating…' : 'Generate file'}
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-2">
+                    {/* biome-ignore lint/a11y/useMediaCaption: Generated narration does not have captions yet. */}
+                    <audio
+                      ref={audioRef}
+                      controls
+                      preload="auto"
+                      src={audioUrl || undefined}
+                      aria-label="EPUB narration preview"
+                      className="h-10 w-full"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={playNarration}
+                      disabled={!audioUrl || isNarrationBusy}
+                    >
+                      <FileAudio className="size-4" />
+                      Play again
+                    </Button>
+                    {savedOutputPath ? (
+                      <p className="wrap-break-word text-muted-foreground text-xs leading-5">
+                        {savedOutputPath}
+                      </p>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          <Card className="min-w-0 border-border/70 shadow-sm backdrop-blur">
             <CardHeader>
-              <CardTitle className='text-base'>Reading pane</CardTitle>
+              <CardTitle className="text-base">Reading pane</CardTitle>
             </CardHeader>
-            <CardContent className='min-w-0 grow'>
-              <div className='overflow-hidden rounded-lg h-full bg-background'>
+            <CardContent className="min-w-0 grow">
+              <div className="h-full overflow-hidden rounded-lg bg-background">
                 <iframe
                   ref={iframeRef}
-                  title='EPUB chapter'
-                  className='grow h-full flex-1 w-full border-0 bg-background'
-                  sandbox='allow-same-origin'
+                  title="EPUB chapter"
+                  className="h-full w-full flex-1 grow border-0 bg-background"
+                  sandbox="allow-same-origin"
                   srcDoc={readerSrcDoc}
                   style={{ colorScheme: readerTheme.colorScheme }}
                   onLoad={() => {
