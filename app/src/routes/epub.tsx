@@ -53,6 +53,11 @@ import {
   extractSpeechTextFromChapterHtml,
 } from '@/lib/epub-speech';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
+import {
+  type EpubChapterResume,
+  type LastOpenedEpub,
+  useEpubStore,
+} from '@/stores/epub-store';
 import rawReaderDocumentCss from './epub-reader.css?raw';
 
 export const Route = createFileRoute('/epub')({ component: EpubReaderPage });
@@ -180,6 +185,40 @@ function chapterListItemIndex(
 
   const key = chapterListItemKey(item);
   return items.findIndex((candidate) => chapterListItemKey(candidate) === key);
+}
+
+function chapterResumeFromItem(
+  items: ChapterListItem[],
+  item: ChapterListItem,
+): EpubChapterResume {
+  return {
+    listItemKey: chapterListItemKey(item),
+    id: item.id,
+    label: item.label,
+    selector: item.kind === 'toc' ? item.selector : '',
+    index: chapterListItemIndex(items, item),
+    updatedAt: Date.now(),
+  };
+}
+
+function readFilePath(file: File): string | undefined {
+  const path = (file as File & { path?: unknown }).path;
+  return typeof path === 'string' && path ? path : undefined;
+}
+
+function isSameEpubFile(file: File, book: LastOpenedEpub): boolean {
+  return (
+    file.name === book.fileName &&
+    file.size === book.fileSize &&
+    file.lastModified === book.fileLastModified
+  );
+}
+
+function formatLastOpenedTime(openedAt: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(openedAt));
 }
 
 function findNextSectionSelector(
@@ -340,6 +379,11 @@ function EpubReaderPage() {
   const epubRef = useRef<EpubFile | null>(null);
   const loadedChapterIdRef = useRef<string | null>(null);
   const readerTheme = useReaderTheme();
+  const lastOpenedBook = useEpubStore((state) => state.lastOpenedBook);
+  const setLastOpenedBook = useEpubStore((state) => state.setLastOpenedBook);
+  const setLastOpenedBookChapter = useEpubStore(
+    (state) => state.setLastOpenedBookChapter,
+  );
 
   const [bookTitle, setBookTitle] = useState('');
   const [chapters, setChapters] = useState<ChapterListItem[]>([]);
@@ -450,15 +494,36 @@ function EpubReaderPage() {
       const epub = await initEpubFile(file);
       epubRef.current = epub;
       const meta = epub.getMetadata();
-      setBookTitle(meta.title || file.name);
+      const title = meta.title || file.name;
+      setBookTitle(title);
       const list = buildChapterList(epub);
       setChapters(list);
-      const first = list[0];
-      if (first) {
-        const selector = first.kind === 'toc' ? first.selector : '';
-        setActiveListItem(first);
-        await openChapter(epub, first.id, selector);
+      const resumedItem =
+        lastOpenedBook && isSameEpubFile(file, lastOpenedBook)
+          ? list.find(
+              (item) =>
+                chapterListItemKey(item) ===
+                lastOpenedBook.activeChapter?.listItemKey,
+            )
+          : undefined;
+      const itemToOpen = resumedItem ?? list[0];
+      const activeChapterResume = itemToOpen
+        ? chapterResumeFromItem(list, itemToOpen)
+        : null;
+
+      if (itemToOpen) {
+        const selector = itemToOpen.kind === 'toc' ? itemToOpen.selector : '';
+        setActiveListItem(itemToOpen);
+        await openChapter(epub, itemToOpen.id, selector);
       }
+      setLastOpenedBook({
+        fileName: file.name,
+        fileSize: file.size,
+        fileLastModified: file.lastModified,
+        filePath: readFilePath(file),
+        title,
+        activeChapter: activeChapterResume,
+      });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       setError(message);
@@ -487,12 +552,14 @@ function EpubReaderPage() {
             }
           : current,
       );
+      setLastOpenedBookChapter(chapterResumeFromItem(chapters, item));
       return;
     }
     setIsBusy(true);
     try {
       setActiveListItem(item);
       await openChapter(epub, item.id, selector);
+      setLastOpenedBookChapter(chapterResumeFromItem(chapters, item));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       setError(message);
@@ -704,6 +771,24 @@ function EpubReaderPage() {
                       Choose file…
                     </Button>
                   </div>
+
+                  {lastOpenedBook && !bookTitle ? (
+                    <div className="rounded-md border px-3 py-2 text-sm">
+                      <p className="font-medium leading-snug">
+                        Last opened: {lastOpenedBook.title}
+                      </p>
+                      <p className="text-muted-foreground text-xs leading-5">
+                        {lastOpenedBook.fileName} ·{' '}
+                        {formatLastOpenedTime(lastOpenedBook.openedAt)}
+                        {lastOpenedBook.activeChapter
+                          ? ` · ${lastOpenedBook.activeChapter.label}`
+                          : ''}
+                      </p>
+                      <p className="text-muted-foreground text-xs leading-5">
+                        Choose the same file to resume this chapter.
+                      </p>
+                    </div>
+                  ) : null}
 
                   {bookTitle ? (
                     <p className="font-medium text-sm leading-snug">

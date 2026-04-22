@@ -25,10 +25,8 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
-import {
-  isPlaybackMode,
-  useSettingsStore,
-} from '@/stores/settings-store';
+import { usePlaygroundStore } from '@/stores/playground-store';
+import { isPlaybackMode, useSettingsStore } from '@/stores/settings-store';
 
 export const Route = createFileRoute('/')({ component: PlaygroundPage });
 
@@ -66,9 +64,8 @@ const formatModifiedTime = (modifiedSec: number | null) => {
 function PlaygroundPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const deleteConfirmationTimeoutRef = useRef<number | null>(null);
-  const [text, setText] = useState(
-    'Hello from Kokoros. Generate speech here, then play it immediately in the app.',
-  );
+  const text = usePlaygroundStore((state) => state.draftText);
+  const setText = usePlaygroundStore((state) => state.setDraftText);
   const [style, setStyle] = useState('af_heart');
   const playbackMode = useSettingsStore((state) => state.playbackMode);
   const setPlaybackMode = useSettingsStore((state) => state.setPlaybackMode);
