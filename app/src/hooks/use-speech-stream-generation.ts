@@ -33,6 +33,7 @@ export type SpeechStreamGenerationRequest = {
   style: string;
   speed?: number;
   saveToDisk: boolean;
+  streamAudio?: boolean;
   outputLabel?: string;
   outputSubdir?: string;
   mono?: boolean;
@@ -184,17 +185,21 @@ export function useSpeechStreamGeneration({
       streamCleanupRef.current?.();
       streamCleanupRef.current = null;
 
+      const shouldStream = !!request.streamAudio;
+
       try {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new AudioContext();
-        }
+        if (shouldStream) {
+          if (!audioContextRef.current) {
+            audioContextRef.current = new AudioContext();
+          }
 
-        if (audioContextRef.current.state === 'suspended') {
-          await audioContextRef.current.resume();
-        }
+          if (audioContextRef.current.state === 'suspended') {
+            await audioContextRef.current.resume();
+          }
 
-        nextPlayTimeRef.current =
-          audioContextRef.current.currentTime + WEB_AUDIO_START_DELAY_SEC;
+          nextPlayTimeRef.current =
+            audioContextRef.current.currentTime + WEB_AUDIO_START_DELAY_SEC;
+        }
 
         const unlistenChunk = await listen<SpeechStreamChunkEvent>(
           SPEECH_STREAM_CHUNK_EVENT,
@@ -214,11 +219,13 @@ export function useSpeechStreamGeneration({
               if (!request.saveToDisk) {
                 streamedAudioChunks.push(bytes);
               }
-              scheduleStreamChunk(
-                bytes,
-                event.payload.sampleRate,
-                event.payload.channels,
-              );
+              if (shouldStream) {
+                scheduleStreamChunk(
+                  bytes,
+                  event.payload.sampleRate,
+                  event.payload.channels,
+                );
+              }
             } catch (caughtError) {
               const message =
                 caughtError instanceof Error

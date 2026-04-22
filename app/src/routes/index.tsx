@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
@@ -66,7 +66,9 @@ function PlaygroundPage() {
     'Hello from Kokoros. Generate speech here, then play it immediately in the app.',
   );
   const [style, setStyle] = useState('af_heart');
-  const [saveToDisk, setSaveToDisk] = useState(true);
+  const [playbackMode, setPlaybackMode] = useState<
+    'stream' | 'save-stream' | 'save-silent'
+  >('save-stream');
   const [isLoadingSavedAudio, setIsLoadingSavedAudio] = useState(false);
   const [deletingAudioPath, setDeletingAudioPath] = useState('');
   const [pendingDeletePath, setPendingDeletePath] = useState('');
@@ -126,7 +128,8 @@ function PlaygroundPage() {
     const response = await generateStream({
       text,
       style,
-      saveToDisk,
+      saveToDisk: playbackMode !== 'stream',
+      streamAudio: playbackMode !== 'save-silent',
       mono: true,
     });
 
@@ -195,8 +198,9 @@ function PlaygroundPage() {
               Generate and audition speech
             </h1>
             <p className="max-w-2xl text-muted-foreground text-sm">
-              Write your script, pick a voice, then generate. New audio plays
-              automatically; use Play to hear it again.
+              Write your script, pick a voice, then generate. Choose a playback
+              mode — stream immediately, save and stream, or save silently for
+              full spatial audio quality.
             </p>
           </div>
         </div>
@@ -242,14 +246,75 @@ function PlaygroundPage() {
                 </Select>
               </div>
 
-              <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                <Label htmlFor="save-to-disk">Save WAV to disk</Label>
-                <Switch
-                  id="save-to-disk"
-                  checked={saveToDisk}
-                  onCheckedChange={setSaveToDisk}
-                  aria-label="Save WAV to disk"
-                />
+              <div className="space-y-2">
+                <Label>Playback mode</Label>
+                <RadioGroup
+                  value={playbackMode}
+                  onValueChange={(value) =>
+                    setPlaybackMode(
+                      value as 'stream' | 'save-stream' | 'save-silent',
+                    )
+                  }
+                  className="gap-2"
+                >
+                  <label
+                    htmlFor="mode-stream"
+                    className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors hover:bg-muted/50 has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-primary/5"
+                  >
+                    <RadioGroupItem
+                      id="mode-stream"
+                      value="stream"
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="grid gap-0.5">
+                      <span className="font-medium text-sm leading-none">
+                        Stream only
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        Play immediately, no file saved
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    htmlFor="mode-save-stream"
+                    className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors hover:bg-muted/50 has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-primary/5"
+                  >
+                    <RadioGroupItem
+                      id="mode-save-stream"
+                      value="save-stream"
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="grid gap-0.5">
+                      <span className="font-medium text-sm leading-none">
+                        Save &amp; stream
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        Save WAV and stream audio while synthesizing
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    htmlFor="mode-save-silent"
+                    className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors hover:bg-muted/50 has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-primary/5"
+                  >
+                    <RadioGroupItem
+                      id="mode-save-silent"
+                      value="save-silent"
+                      className="mt-0.5 shrink-0"
+                    />
+                    <div className="grid gap-0.5">
+                      <span className="font-medium text-sm leading-none">
+                        Save silently
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        Save WAV without auto-playing — use Play for full
+                        spatial audio
+                      </span>
+                    </div>
+                  </label>
+                </RadioGroup>
               </div>
 
               {error ? (
