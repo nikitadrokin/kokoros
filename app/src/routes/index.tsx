@@ -25,6 +25,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
+import {
+  isPlaybackMode,
+  useSettingsStore,
+} from '@/stores/settings-store';
 
 export const Route = createFileRoute('/')({ component: PlaygroundPage });
 
@@ -66,9 +70,8 @@ function PlaygroundPage() {
     'Hello from Kokoros. Generate speech here, then play it immediately in the app.',
   );
   const [style, setStyle] = useState('af_heart');
-  const [playbackMode, setPlaybackMode] = useState<
-    'stream' | 'save-stream' | 'save-silent'
-  >('save-stream');
+  const playbackMode = useSettingsStore((state) => state.playbackMode);
+  const setPlaybackMode = useSettingsStore((state) => state.setPlaybackMode);
   const [isLoadingSavedAudio, setIsLoadingSavedAudio] = useState(false);
   const [deletingAudioPath, setDeletingAudioPath] = useState('');
   const [pendingDeletePath, setPendingDeletePath] = useState('');
@@ -250,11 +253,11 @@ function PlaygroundPage() {
                 <Label>Playback mode</Label>
                 <RadioGroup
                   value={playbackMode}
-                  onValueChange={(value) =>
-                    setPlaybackMode(
-                      value as 'stream' | 'save-stream' | 'save-silent',
-                    )
-                  }
+                  onValueChange={(value) => {
+                    if (isPlaybackMode(value)) {
+                      setPlaybackMode(value);
+                    }
+                  }}
                   className="gap-2"
                 >
                   <label
