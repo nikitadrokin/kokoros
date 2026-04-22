@@ -43,18 +43,18 @@ export default function Header() {
   const isSpeechActive = pathname === '/' || pathname.startsWith('/speech');
 
   return (
-    <header className='sticky top-0 z-50 border-b bg-background/90 px-4 backdrop-blur supports-backdrop-filter:bg-background/70'>
-      <NavigationMenu className='min-w-full flex-1 justify-start' align='start'>
-        <NavigationMenuList className='justify-start gap-1 overflow-x-auto py-2 w-full '>
+    <header className="sticky top-0 z-50 border-b bg-background/90 px-4 backdrop-blur supports-backdrop-filter:bg-background/70">
+      <NavigationMenu className="min-w-full flex-1 justify-start" align="start">
+        <NavigationMenuList className="w-full justify-start gap-1 overflow-x-auto py-2">
           <Link
-            to='/'
-            className='inline-flex shrink-0 items-center gap-2 rounded-full px-2 py-1.5 font-semibold text-foreground text-sm tracking-tight no-underline transition-colors hover:text-primary focus-visible:outline-1 focus-visible:ring-3 focus-visible:ring-ring/30'
-            aria-label='Go to Kokoros speech playground'
+            to="/"
+            className="inline-flex shrink-0 items-center gap-2 rounded-full px-2 py-1.5 font-semibold text-foreground text-sm tracking-tight no-underline transition-colors hover:text-primary focus-visible:outline-1 focus-visible:ring-3 focus-visible:ring-ring/30"
+            aria-label="Go to Kokoros speech playground"
           >
-            <span className='grid size-7 place-items-center rounded-full border bg-card text-primary shadow-sm'>
-              <AudioLinesIcon className='size-4' aria-hidden='true' />
+            <span className="grid size-7 place-items-center rounded-full border bg-card text-primary shadow-sm">
+              <AudioLinesIcon className="size-4" aria-hidden="true" />
             </span>
-            <span className='hidden sm:inline'>Kokoros</span>
+            <span className="hidden sm:inline">Kokoros</span>
           </Link>
 
           <NavigationMenuItem>
@@ -63,16 +63,16 @@ export default function Header() {
                 'h-9 gap-1.5 whitespace-nowrap rounded-full px-3 py-2 font-medium',
                 isSpeechActive && 'bg-muted text-foreground',
               )}
-              aria-label='Speech tools'
+              aria-label="Speech tools"
             >
               <AudioLinesIcon
-                className='size-4 text-muted-foreground'
-                aria-hidden='true'
+                className="size-4 text-muted-foreground"
+                aria-hidden="true"
               />
               <span>Speech</span>
             </NavigationMenuTrigger>
-            <NavigationMenuContent className='w-[min(28rem,calc(100vw-2rem))]'>
-              <div className='grid gap-1'>
+            <NavigationMenuContent className="w-[min(28rem,calc(100vw-2rem))]">
+              <div className="grid gap-1">
                 {speechItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.to;
@@ -82,15 +82,15 @@ export default function Header() {
                       key={item.to}
                       active={isActive}
                       render={<Link to={item.to} />}
-                      className='grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 rounded-2xl px-3 py-3'
+                      className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 rounded-2xl px-3 py-3"
                       aria-label={item.description}
                     >
                       <Icon
-                        className='mt-0.5 size-4 text-muted-foreground'
-                        aria-hidden='true'
+                        className="mt-0.5 size-4 text-muted-foreground"
+                        aria-hidden="true"
                       />
-                      <span className='font-medium'>{item.label}</span>
-                      <span className='col-start-2 text-muted-foreground text-xs leading-5'>
+                      <span className="font-medium">{item.label}</span>
+                      <span className="col-start-2 text-muted-foreground text-xs leading-5">
                         {item.description}
                       </span>
                     </NavigationMenuLink>
@@ -116,8 +116,8 @@ export default function Header() {
                   aria-label={item.description}
                 >
                   <Icon
-                    className='size-4 text-muted-foreground'
-                    aria-hidden='true'
+                    className="size-4 text-muted-foreground"
+                    aria-hidden="true"
                   />
                   <span>{item.label}</span>
                 </NavigationMenuLink>
@@ -125,7 +125,7 @@ export default function Header() {
             );
           })}
 
-          <div className='ml-auto flex items-center gap-2'>
+          <div className="ml-auto flex items-center gap-2">
             <UpdateButton />
             <ThemeToggle />
           </div>

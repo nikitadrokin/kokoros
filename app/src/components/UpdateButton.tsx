@@ -103,10 +103,10 @@ export default function UpdateButton() {
       <TooltipTrigger
         render={
           <Button
-            type='button'
+            type="button"
             variant={variant}
-            size='icon-sm'
-            className='shrink-0 rounded-full transition-colors duration-200'
+            size="icon-sm"
+            className="shrink-0 rounded-full transition-colors duration-200"
             disabled={isLoading}
             onClick={handleUpdateClick}
             aria-label={label}
@@ -114,11 +114,11 @@ export default function UpdateButton() {
         }
       >
         {isLoading ? (
-          <Loader2Icon className='size-4 animate-spin' aria-hidden='true' />
+          <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
         ) : state === 'ready' ? (
-          <RefreshCwIcon className='size-4' aria-hidden='true' />
+          <RefreshCwIcon className="size-4" aria-hidden="true" />
         ) : (
-          <DownloadIcon className='size-4' aria-hidden='true' />
+          <DownloadIcon className="size-4" aria-hidden="true" />
         )}
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>

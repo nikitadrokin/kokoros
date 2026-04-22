@@ -4,17 +4,17 @@ import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 export const Route = createRootRoute({
-	component: RootLayout,
+  component: RootLayout,
 });
 
 function RootLayout() {
-	return (
-		<TooltipProvider>
-			<div className="min-h-screen bg-background text-foreground">
-				<Header />
-				<Outlet />
-				<Toaster />
-			</div>
-		</TooltipProvider>
-	);
+  return (
+    <TooltipProvider>
+      <div className="min-h-screen bg-background text-foreground">
+        <Header />
+        <Outlet />
+        <Toaster />
+      </div>
+    </TooltipProvider>
+  );
 }

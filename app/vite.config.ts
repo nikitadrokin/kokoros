@@ -6,12 +6,12 @@ import viteReact from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 const config = defineConfig({
-	resolve: { tsconfigPaths: true },
-	plugins: [
-		tailwindcss(),
-		TanStackRouterVite({ target: 'react' }),
-		viteReact(),
-	],
+  resolve: { tsconfigPaths: true },
+  plugins: [
+    tailwindcss(),
+    TanStackRouterVite({ target: 'react' }),
+    viteReact(),
+  ],
 });
 
 export default config;
