@@ -10,9 +10,11 @@ export const Route = createRootRoute({
 function RootLayout() {
   return (
     <TooltipProvider>
-      <div className='min-h-screen bg-background text-foreground'>
+      <div className='flex h-dvh flex-col overflow-hidden bg-background text-foreground'>
         <Header />
-        <Outlet />
+        <div className='min-h-0 flex-1 overflow-y-auto overscroll-y-contain'>
+          <Outlet />
+        </div>
         <Toaster />
       </div>
     </TooltipProvider>
