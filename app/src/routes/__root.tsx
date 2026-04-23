@@ -11,8 +11,8 @@ function RootLayout() {
   return (
     <TooltipProvider>
       <div className='flex h-dvh flex-col overflow-hidden bg-background text-foreground'>
-        <Header />
         <div className='min-h-0 flex-1 overflow-y-auto overscroll-y-contain'>
+          <Header />
           <Outlet />
         </div>
         <Toaster />
