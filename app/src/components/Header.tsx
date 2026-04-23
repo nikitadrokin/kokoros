@@ -3,6 +3,7 @@ import { AudioLinesIcon, BookOpenIcon, WandSparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ThemeToggle from './ThemeToggle';
 import UpdateButton from './UpdateButton';
+import { Badge } from './ui/badge';
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -56,6 +57,15 @@ export default function Header() {
             </span>
             <span className="hidden sm:inline">Kokoros</span>
           </Link>
+          {import.meta.env.DEV && (
+            <Badge
+              variant="outline"
+              className="h-5 border-primary/30 bg-primary/10 px-1.5 font-medium text-[10px] text-primary"
+              title="Development build"
+            >
+              dev
+            </Badge>
+          )}
 
           <NavigationMenuItem>
             <NavigationMenuTrigger
