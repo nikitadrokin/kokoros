@@ -10,7 +10,7 @@ export const Route = createRootRoute({
 function RootLayout() {
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-background text-foreground">
+      <div className='min-h-screen bg-background text-foreground'>
         <Header />
         <Outlet />
         <Toaster />
