@@ -39,7 +39,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Tabs,
   TabsContent,
@@ -400,7 +400,9 @@ function EpubReaderPage() {
     useState<NarrationScope>('chapter');
   const [narrationStyle, setNarrationStyle] = useState('af_heart');
   const [narrationSpeed, setNarrationSpeed] = useState(1);
-  const [saveNarrationToDisk, setSaveNarrationToDisk] = useState(true);
+  const [narrationMode, setNarrationMode] = useState<
+    'stream' | 'save-stream' | 'save-silent'
+  >('save-stream');
   const [isGeneratingFile, setIsGeneratingFile] = useState(false);
   const [narrationStatus, setNarrationStatus] = useState('');
   const [timestampCount, setTimestampCount] = useState(0);
@@ -633,7 +635,8 @@ function EpubReaderPage() {
       text,
       style: narrationStyle,
       speed: narrationSpeed,
-      saveToDisk: saveNarrationToDisk,
+      saveToDisk: narrationMode !== 'stream',
+      streamAudio: narrationMode !== 'save-silent',
       ...buildNarrationOutputNames(),
     });
 
@@ -939,14 +942,75 @@ function EpubReaderPage() {
                       />
                     </div>
 
-                    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-                      <Label htmlFor="epub-save-audio">Save streamed WAV</Label>
-                      <Switch
-                        id="epub-save-audio"
-                        checked={saveNarrationToDisk}
-                        onCheckedChange={setSaveNarrationToDisk}
-                        aria-label="Save streamed narration to disk"
-                      />
+                    <div className="space-y-2">
+                      <Label>Playback mode</Label>
+                      <RadioGroup
+                        value={narrationMode}
+                        onValueChange={(value) =>
+                          setNarrationMode(
+                            value as 'stream' | 'save-stream' | 'save-silent',
+                          )
+                        }
+                        className="gap-2"
+                      >
+                        <label
+                          htmlFor="epub-mode-stream"
+                          className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors hover:bg-muted/50 has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-primary/5"
+                        >
+                          <RadioGroupItem
+                            id="epub-mode-stream"
+                            value="stream"
+                            className="mt-0.5 shrink-0"
+                          />
+                          <div className="grid gap-0.5">
+                            <span className="font-medium text-sm leading-none">
+                              Stream only
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              Play immediately, no file saved
+                            </span>
+                          </div>
+                        </label>
+
+                        <label
+                          htmlFor="epub-mode-save-stream"
+                          className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors hover:bg-muted/50 has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-primary/5"
+                        >
+                          <RadioGroupItem
+                            id="epub-mode-save-stream"
+                            value="save-stream"
+                            className="mt-0.5 shrink-0"
+                          />
+                          <div className="grid gap-0.5">
+                            <span className="font-medium text-sm leading-none">
+                              Save &amp; stream
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              Save WAV and stream audio while synthesizing
+                            </span>
+                          </div>
+                        </label>
+
+                        <label
+                          htmlFor="epub-mode-save-silent"
+                          className="flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors hover:bg-muted/50 has-[[data-checked]]:border-primary/50 has-[[data-checked]]:bg-primary/5"
+                        >
+                          <RadioGroupItem
+                            id="epub-mode-save-silent"
+                            value="save-silent"
+                            className="mt-0.5 shrink-0"
+                          />
+                          <div className="grid gap-0.5">
+                            <span className="font-medium text-sm leading-none">
+                              Save silently
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              Save WAV without auto-playing — use Play for full
+                              spatial audio
+                            </span>
+                          </div>
+                        </label>
+                      </RadioGroup>
                     </div>
                   </div>
 
