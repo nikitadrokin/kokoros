@@ -551,6 +551,43 @@ fn delete_saved_audio(path: String, app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn reveal_saved_audio_in_finder(path: String, app: AppHandle) -> Result<(), String> {
+    let base_dir = saved_audio_dir(&app)?;
+    let saved_path = resolve_saved_audio_path(&base_dir, &path)?;
+
+    reveal_file_in_finder(&saved_path)
+}
+
+#[cfg(target_os = "macos")]
+fn reveal_file_in_finder(path: &Path) -> Result<(), String> {
+    let output = std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(path)
+        .output()
+        .map_err(|error| format!("Failed to open Finder: {error}"))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    Err(format!(
+        "Failed to reveal `{}` in Finder: {}",
+        path.display(),
+        if stderr.is_empty() {
+            "open exited without an error message".to_string()
+        } else {
+            stderr
+        }
+    ))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reveal_file_in_finder(_path: &Path) -> Result<(), String> {
+    Err("Reveal in Finder is only available on macOS.".to_string())
+}
+
+#[tauri::command]
 async fn prepare_app_update(
     app: AppHandle,
     prepared_update: State<'_, PreparedAppUpdateState>,
@@ -1077,6 +1114,7 @@ pub fn run() {
             synthesize_speech_stream,
             list_saved_audio,
             delete_saved_audio,
+            reveal_saved_audio_in_finder,
             prepare_app_update,
             install_prepared_app_update
         ])

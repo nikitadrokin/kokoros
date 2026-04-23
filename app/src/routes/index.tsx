@@ -4,6 +4,7 @@ import {
   AudioLinesIcon,
   Check,
   FileAudio,
+  FolderOpen,
   LoaderCircle,
   Music2,
   Play,
@@ -71,6 +72,7 @@ function PlaygroundPage() {
   const setPlaybackMode = useSettingsStore((state) => state.setPlaybackMode);
   const [isLoadingSavedAudio, setIsLoadingSavedAudio] = useState(false);
   const [deletingAudioPath, setDeletingAudioPath] = useState('');
+  const [revealingAudioPath, setRevealingAudioPath] = useState('');
   const [pendingDeletePath, setPendingDeletePath] = useState('');
   const [savedAudioFiles, setSavedAudioFiles] = useState<SavedAudioFile[]>([]);
   const [savedAudioError, setSavedAudioError] = useState('');
@@ -144,6 +146,28 @@ function PlaygroundPage() {
     requestAnimationFrame(() => {
       audioRef.current?.play().catch(() => undefined);
     });
+  };
+
+  const handleRevealSavedAudio = async (file: SavedAudioFile) => {
+    if (revealingAudioPath) {
+      return;
+    }
+
+    setError('');
+    setSavedAudioError('');
+    setRevealingAudioPath(file.path);
+
+    try {
+      await invoke('reveal_saved_audio_in_finder', { path: file.path });
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : String(caughtError);
+      setSavedAudioError(message);
+    } finally {
+      setRevealingAudioPath('');
+    }
   };
 
   const handleDeleteSavedAudio = async (file: SavedAudioFile) => {
@@ -404,6 +428,7 @@ function PlaygroundPage() {
                     {savedAudioFiles.map((file) => {
                       const isActive = savedOutputPath === file.path;
                       const isDeleting = deletingAudioPath === file.path;
+                      const isRevealing = revealingAudioPath === file.path;
                       const isConfirmingDelete =
                         pendingDeletePath === file.path;
 
@@ -431,6 +456,20 @@ function PlaygroundPage() {
                               title={`Play ${file.name}`}
                             >
                               <Play className="size-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon-sm"
+                              onClick={() => void handleRevealSavedAudio(file)}
+                              disabled={isDeleting || Boolean(revealingAudioPath)}
+                              aria-label={`Reveal ${file.name} in Finder`}
+                              title={`Reveal ${file.name} in Finder`}
+                            >
+                              {isRevealing ? (
+                                <LoaderCircle className="size-4 animate-spin" />
+                              ) : (
+                                <FolderOpen className="size-4" />
+                              )}
                             </Button>
                             <Button
                               variant="destructive"
