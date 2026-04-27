@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Kokoros",
   "mainBinaryName": "kokoros",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "identifier": "me.nkdr.kokoros",
   "build": {
     "frontendDist": "../dist",
