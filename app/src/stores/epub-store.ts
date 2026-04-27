@@ -11,10 +11,12 @@ export type EpubChapterResume = {
 };
 
 export type LastOpenedEpub = {
+  id: string;
   fileName: string;
   fileSize: number;
   fileLastModified: number;
-  filePath?: string;
+  importedPath: string;
+  originalPath?: string;
   title: string;
   openedAt: number;
   activeChapter: EpubChapterResume | null;

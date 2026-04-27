@@ -93,6 +93,42 @@ struct SavedAudioFile {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct EpubFilePayload {
+    id: Option<String>,
+    file_name: String,
+    file_path: String,
+    imported_path: Option<String>,
+    original_path: Option<String>,
+    file_size: u64,
+    file_last_modified: u64,
+    bytes_base64: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportedEpubPayload {
+    id: String,
+    file_name: String,
+    file_path: String,
+    imported_path: String,
+    original_path: String,
+    file_size: u64,
+    file_last_modified: u64,
+    bytes_base64: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportedEpubBook {
+    id: String,
+    name: String,
+    path: String,
+    modified_sec: Option<u64>,
+    size_bytes: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct AppUpdateResponse {
     status: AppUpdateStatus,
     version: Option<String>,
@@ -556,6 +592,254 @@ fn reveal_saved_audio_in_finder(path: String, app: AppHandle) -> Result<(), Stri
     let saved_path = resolve_saved_audio_path(&base_dir, &path)?;
 
     reveal_file_in_finder(&saved_path)
+}
+
+fn validate_epub_path(path: &Path, label: &str) -> Result<(), String> {
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("epub"))
+    {
+        return Err(format!("The {label} book path is not an EPUB file."));
+    }
+
+    Ok(())
+}
+
+fn epub_file_payload(
+    path: &Path,
+    id: Option<String>,
+    imported_path: Option<String>,
+    original_path: Option<String>,
+) -> Result<EpubFilePayload, String> {
+    validate_epub_path(path, "saved")?;
+
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("Failed to inspect EPUB `{}`: {error}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("EPUB `{}` is not a file.", path.display()));
+    }
+
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("book.epub")
+        .to_string();
+    let file_last_modified = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+        .map(|value| value.as_millis() as u64)
+        .unwrap_or(0);
+    let bytes = fs::read(path)
+        .map_err(|error| format!("Failed to read EPUB `{}`: {error}", path.display()))?;
+
+    Ok(EpubFilePayload {
+        id,
+        file_name,
+        file_path: path.display().to_string(),
+        imported_path,
+        original_path,
+        file_size: metadata.len(),
+        file_last_modified,
+        bytes_base64: BASE64.encode(bytes),
+    })
+}
+
+fn app_data_books_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("books"))
+        .map_err(|error| format!("Failed to resolve app data directory: {error}"))
+}
+
+fn resolve_imported_epub_path(app: &AppHandle, imported_path: &str) -> Result<PathBuf, String> {
+    let imported_path = imported_path.trim();
+    if imported_path.is_empty() {
+        return Err("Imported EPUB path is empty.".to_string());
+    }
+
+    let relative_path = PathBuf::from(imported_path);
+    if relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err("Imported EPUB path must stay inside app data.".to_string());
+    }
+
+    Ok(app_data_books_dir(app)?.join(relative_path))
+}
+
+fn create_imported_book_id(source_path: &Path) -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_millis())
+        .unwrap_or(0);
+    let sanitized_stem = source_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("book")
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let stem = sanitized_stem
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .take(4)
+        .collect::<Vec<_>>()
+        .join("-");
+
+    let prefix = if stem.is_empty() { "book" } else { &stem };
+    format!("{timestamp}-{prefix}")
+}
+
+#[tauri::command]
+fn import_epub_file(path: String, app: AppHandle) -> Result<ImportedEpubPayload, String> {
+    let path = PathBuf::from(path.trim());
+    validate_epub_path(&path, "selected")?;
+
+    let metadata = fs::metadata(&path).map_err(|error| {
+        format!(
+            "Failed to inspect selected EPUB `{}`: {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(format!("Selected EPUB `{}` is not a file.", path.display()));
+    }
+
+    let id = create_imported_book_id(&path);
+    let imported_path = format!("{id}/book.epub");
+    let destination = resolve_imported_epub_path(&app, &imported_path)?;
+    ensure_parent_dir(&destination)?;
+    fs::copy(&path, &destination).map_err(|error| {
+        format!(
+            "Failed to import EPUB `{}` into app data: {error}",
+            path.display()
+        )
+    })?;
+
+    let payload = epub_file_payload(
+        &destination,
+        Some(id.clone()),
+        Some(imported_path.clone()),
+        Some(path.display().to_string()),
+    )?;
+
+    Ok(ImportedEpubPayload {
+        id,
+        file_name: payload.file_name,
+        file_path: payload.file_path,
+        imported_path,
+        original_path: path.display().to_string(),
+        file_size: payload.file_size,
+        file_last_modified: payload.file_last_modified,
+        bytes_base64: payload.bytes_base64,
+    })
+}
+
+#[tauri::command]
+fn read_imported_epub_file(
+    imported_path: String,
+    app: AppHandle,
+) -> Result<EpubFilePayload, String> {
+    let path = resolve_imported_epub_path(&app, &imported_path)?;
+    let id = Path::new(&imported_path)
+        .components()
+        .next()
+        .and_then(|component| match component {
+            std::path::Component::Normal(value) => value.to_str(),
+            _ => None,
+        })
+        .map(ToString::to_string);
+    epub_file_payload(&path, id, Some(imported_path), None)
+}
+
+#[tauri::command]
+fn list_imported_epub_books(app: AppHandle) -> Result<Vec<ImportedEpubBook>, String> {
+    let base_dir = app_data_books_dir(&app)?;
+
+    if !base_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut books = Vec::new();
+    for entry in fs::read_dir(&base_dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let book_dir = entry.path();
+        let metadata = entry.metadata().map_err(|error| error.to_string())?;
+        if !metadata.is_dir() {
+            continue;
+        }
+
+        let Some(id) = book_dir
+            .file_name()
+            .and_then(|value| value.to_str())
+            .map(ToString::to_string)
+        else {
+            continue;
+        };
+        let book_path = book_dir.join("book.epub");
+        let Ok(book_metadata) = fs::metadata(&book_path) else {
+            continue;
+        };
+        if !book_metadata.is_file() {
+            continue;
+        }
+
+        let modified_sec = book_metadata
+            .modified()
+            .ok()
+            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+            .map(|value| value.as_secs());
+
+        books.push(ImportedEpubBook {
+            id: id.clone(),
+            name: "book.epub".to_string(),
+            path: format!("{id}/book.epub"),
+            modified_sec,
+            size_bytes: book_metadata.len(),
+        });
+    }
+
+    books.sort_by(|left, right| {
+        right
+            .modified_sec
+            .cmp(&left.modified_sec)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    Ok(books)
+}
+
+#[tauri::command]
+fn delete_imported_epub_book(imported_path: String, app: AppHandle) -> Result<(), String> {
+    let path = resolve_imported_epub_path(&app, &imported_path)?;
+    let books_dir = app_data_books_dir(&app)?;
+    let book_dir = path.parent().ok_or_else(|| {
+        format!(
+            "Failed to resolve imported EPUB parent directory for `{}`.",
+            path.display()
+        )
+    })?;
+
+    if book_dir.parent() != Some(books_dir.as_path()) {
+        return Err("Imported EPUB deletion must target one app-owned book.".to_string());
+    }
+
+    fs::remove_dir_all(book_dir).map_err(|error| {
+        format!(
+            "Failed to delete imported EPUB `{}`: {error}",
+            book_dir.display()
+        )
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -1107,6 +1391,7 @@ fn command_log(output: &Output) -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(PreparedAppUpdateState::default())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -1115,6 +1400,10 @@ pub fn run() {
             list_saved_audio,
             delete_saved_audio,
             reveal_saved_audio_in_finder,
+            import_epub_file,
+            read_imported_epub_file,
+            list_imported_epub_books,
+            delete_imported_epub_book,
             prepare_app_update,
             install_prepared_app_update
         ])

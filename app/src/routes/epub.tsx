@@ -8,16 +8,20 @@ import {
   type NavPoint,
 } from '@lingo-reader/epub-parser';
 import { createFileRoute } from '@tanstack/react-router';
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
   AudioLinesIcon,
   BookOpen,
+  Check,
   Download,
   FileAudio,
   FileText,
   LoaderCircle,
   Play,
+  RefreshCw,
   Section,
+  Trash2,
   Upload,
 } from 'lucide-react';
 import {
@@ -31,6 +35,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
   SelectContent,
@@ -39,7 +44,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Tabs,
   TabsContent,
@@ -96,6 +100,36 @@ type TimestampRow = {
   word: string;
   startSec: number;
   endSec: number;
+};
+
+type ReadEpubFileResponse = {
+  id: string | null;
+  fileName: string;
+  filePath: string;
+  importedPath: string | null;
+  originalPath: string | null;
+  fileSize: number;
+  fileLastModified: number;
+  bytesBase64: string;
+};
+
+type ImportedEpubFileResponse = {
+  id: string;
+  fileName: string;
+  filePath: string;
+  importedPath: string;
+  originalPath: string;
+  fileSize: number;
+  fileLastModified: number;
+  bytesBase64: string;
+};
+
+type ImportedEpubBook = {
+  id: string;
+  name: string;
+  path: string;
+  modifiedSec: number | null;
+  sizeBytes: number;
 };
 
 type ReaderTheme = {
@@ -206,6 +240,98 @@ function readFilePath(file: File): string | undefined {
   return typeof path === 'string' && path ? path : undefined;
 }
 
+function attachFilePath(file: File, path: string): File {
+  Object.defineProperty(file, 'path', {
+    configurable: true,
+    value: path,
+  });
+  return file;
+}
+
+function attachImportedBookMetadata(
+  file: File,
+  payload: ReadEpubFileResponse | ImportedEpubFileResponse,
+): File {
+  attachFilePath(file, payload.filePath);
+  Object.defineProperties(file, {
+    importedBookId: {
+      configurable: true,
+      value: payload.id,
+    },
+    importedPath: {
+      configurable: true,
+      value: payload.importedPath,
+    },
+    originalPath: {
+      configurable: true,
+      value: payload.originalPath,
+    },
+  });
+  return file;
+}
+
+function bytesFromBase64(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function fileFromEpubPayload(
+  response: ReadEpubFileResponse | ImportedEpubFileResponse,
+): File {
+  const bytes = bytesFromBase64(response.bytesBase64);
+  const fileBytes = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(fileBytes).set(bytes);
+  const file = new File([fileBytes], response.fileName, {
+    lastModified: Number(response.fileLastModified),
+    type: 'application/epub+zip',
+  });
+  return attachImportedBookMetadata(file, response);
+}
+
+async function importEpubFileFromPath(filePath: string): Promise<File> {
+  const response = await invoke<ImportedEpubFileResponse>('import_epub_file', {
+    path: filePath,
+  });
+  return fileFromEpubPayload(response);
+}
+
+async function readImportedEpubFile(importedPath: string): Promise<File> {
+  const response = await invoke<ReadEpubFileResponse>(
+    'read_imported_epub_file',
+    {
+      importedPath,
+    },
+  );
+  return fileFromEpubPayload(response);
+}
+
+function browserFileToImportedFile(file: File): File {
+  return attachImportedBookMetadata(file, {
+    id: crypto.randomUUID(),
+    fileName: file.name,
+    filePath: file.name,
+    importedPath: file.name,
+    originalPath: file.name,
+    fileSize: file.size,
+    fileLastModified: file.lastModified,
+    bytesBase64: '',
+  });
+}
+
+async function pickEpubPath(defaultPath?: string): Promise<string | null> {
+  const selected = await openDialog({
+    defaultPath,
+    filters: [{ name: 'EPUB', extensions: ['epub'] }],
+    multiple: false,
+    title: 'Open EPUB',
+  });
+  return typeof selected === 'string' ? selected : null;
+}
+
 function isSameEpubFile(file: File, book: LastOpenedEpub): boolean {
   return (
     file.name === book.fileName &&
@@ -214,11 +340,62 @@ function isSameEpubFile(file: File, book: LastOpenedEpub): boolean {
   );
 }
 
+function readImportedBookId(file: File): string | undefined {
+  const id = (file as File & { importedBookId?: unknown }).importedBookId;
+  return typeof id === 'string' && id ? id : undefined;
+}
+
+function readImportedPath(file: File): string | undefined {
+  const importedPath = (file as File & { importedPath?: unknown }).importedPath;
+  return typeof importedPath === 'string' && importedPath
+    ? importedPath
+    : undefined;
+}
+
+function readOriginalPath(file: File): string | undefined {
+  const originalPath = (file as File & { originalPath?: unknown }).originalPath;
+  return typeof originalPath === 'string' && originalPath
+    ? originalPath
+    : undefined;
+}
+
+function shouldResumeEpubFile(file: File, book: LastOpenedEpub): boolean {
+  return (
+    Boolean(readImportedBookId(file) === book.id) ||
+    Boolean(readImportedPath(file) === book.importedPath) ||
+    isSameEpubFile(file, book)
+  );
+}
+
 function formatLastOpenedTime(openedAt: number): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(openedAt));
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  const kib = bytes / 1024;
+  if (kib < 1024) {
+    return `${kib.toFixed(1)} KB`;
+  }
+
+  return `${(kib / 1024).toFixed(1)} MB`;
+}
+
+function formatModifiedTime(modifiedSec: number | null): string {
+  if (!modifiedSec) {
+    return 'Unknown date';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(modifiedSec * 1000));
 }
 
 function findNextSectionSelector(
@@ -376,13 +553,19 @@ function EpubReaderPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const deleteBookConfirmationTimeoutRef = useRef<number | null>(null);
   const epubRef = useRef<EpubFile | null>(null);
   const loadedChapterIdRef = useRef<string | null>(null);
+  const autoOpenAttemptedImportedPathRef = useRef<string | null>(null);
   const readerTheme = useReaderTheme();
   const lastOpenedBook = useEpubStore((state) => state.lastOpenedBook);
+  const lastOpenedBookRef = useRef<LastOpenedEpub | null>(lastOpenedBook);
   const setLastOpenedBook = useEpubStore((state) => state.setLastOpenedBook);
   const setLastOpenedBookChapter = useEpubStore(
     (state) => state.setLastOpenedBookChapter,
+  );
+  const clearLastOpenedBook = useEpubStore(
+    (state) => state.clearLastOpenedBook,
   );
 
   const [bookTitle, setBookTitle] = useState('');
@@ -406,6 +589,12 @@ function EpubReaderPage() {
   const [isGeneratingFile, setIsGeneratingFile] = useState(false);
   const [narrationStatus, setNarrationStatus] = useState('');
   const [timestampCount, setTimestampCount] = useState(0);
+  const [autoOpenStatus, setAutoOpenStatus] = useState('');
+  const [importedBooks, setImportedBooks] = useState<ImportedEpubBook[]>([]);
+  const [importedBooksError, setImportedBooksError] = useState('');
+  const [isLoadingImportedBooks, setIsLoadingImportedBooks] = useState(false);
+  const [deletingBookPath, setDeletingBookPath] = useState('');
+  const [pendingDeleteBookPath, setPendingDeleteBookPath] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState('');
   const {
@@ -445,10 +634,56 @@ function EpubReaderPage() {
   }, [clearPlayerSource, setNarrationError]);
 
   useEffect(() => {
+    lastOpenedBookRef.current = lastOpenedBook;
+  }, [lastOpenedBook]);
+
+  useEffect(() => {
     return () => {
-      disposeEpub();
+      if (deleteBookConfirmationTimeoutRef.current !== null) {
+        window.clearTimeout(deleteBookConfirmationTimeoutRef.current);
+      }
+      const current = epubRef.current;
+      if (current) {
+        current.destroy();
+        epubRef.current = null;
+      }
+      loadedChapterIdRef.current = null;
     };
-  }, [disposeEpub]);
+  }, []);
+
+  const clearBookDeleteConfirmation = useCallback(() => {
+    if (deleteBookConfirmationTimeoutRef.current !== null) {
+      window.clearTimeout(deleteBookConfirmationTimeoutRef.current);
+      deleteBookConfirmationTimeoutRef.current = null;
+    }
+    setPendingDeleteBookPath('');
+  }, []);
+
+  const loadImportedBooks = useCallback(async () => {
+    if (!isTauri()) {
+      setImportedBooks([]);
+      return;
+    }
+
+    setImportedBooksError('');
+    setIsLoadingImportedBooks(true);
+
+    try {
+      const books = await invoke<ImportedEpubBook[]>(
+        'list_imported_epub_books',
+      );
+      setImportedBooks(books);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setImportedBooksError(message);
+    } finally {
+      setIsLoadingImportedBooks(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadImportedBooks();
+  }, [loadImportedBooks]);
 
   const scrollIframeToSelector = useCallback((selector: string) => {
     const doc = iframeRef.current?.contentDocument;
@@ -485,54 +720,237 @@ function EpubReaderPage() {
     [],
   );
 
-  const handleFileChange = async (file: File | undefined) => {
-    if (!file) {
+  const openEpubFile = useCallback(
+    async (file: File, resumeBook: LastOpenedEpub | null = null) => {
+      setError('');
+      setIsBusy(true);
+      disposeEpub();
+      try {
+        const epub = await initEpubFile(file);
+        epubRef.current = epub;
+        const meta = epub.getMetadata();
+        const title = meta.title || file.name;
+        setBookTitle(title);
+        const list = buildChapterList(epub);
+        setChapters(list);
+        const resumedItem =
+          resumeBook && shouldResumeEpubFile(file, resumeBook)
+            ? list.find(
+                (item) =>
+                  chapterListItemKey(item) ===
+                  resumeBook.activeChapter?.listItemKey,
+              )
+            : undefined;
+        const itemToOpen = resumedItem ?? list[0];
+        const activeChapterResume = itemToOpen
+          ? chapterResumeFromItem(list, itemToOpen)
+          : null;
+
+        if (itemToOpen) {
+          const selector = itemToOpen.kind === 'toc' ? itemToOpen.selector : '';
+          setActiveListItem(itemToOpen);
+          await openChapter(epub, itemToOpen.id, selector);
+        }
+        const importedPath =
+          readImportedPath(file) ?? readFilePath(file) ?? file.name;
+        autoOpenAttemptedImportedPathRef.current = importedPath;
+        setLastOpenedBook({
+          id: readImportedBookId(file) ?? crypto.randomUUID(),
+          fileName: file.name,
+          fileSize: file.size,
+          fileLastModified: file.lastModified,
+          importedPath,
+          originalPath: readOriginalPath(file),
+          title,
+          activeChapter: activeChapterResume,
+        });
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setIsBusy(false);
+      }
+    },
+    [disposeEpub, openChapter, setLastOpenedBook],
+  );
+
+  const handleFileChange = useCallback(
+    async (file: File | undefined) => {
+      if (!file) {
+        return;
+      }
+
+      try {
+        setAutoOpenStatus('');
+        const filePath = readFilePath(file);
+        const fileToOpen =
+          isTauri() && filePath
+            ? await importEpubFileFromPath(filePath)
+            : browserFileToImportedFile(file);
+        await openEpubFile(fileToOpen);
+        void loadImportedBooks();
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        setError(message);
+      }
+    },
+    [loadImportedBooks, openEpubFile],
+  );
+
+  const handleChooseFile = useCallback(async () => {
+    if (!isTauri()) {
+      fileInputRef.current?.click();
       return;
     }
-    setError('');
-    setIsBusy(true);
-    disposeEpub();
-    try {
-      const epub = await initEpubFile(file);
-      epubRef.current = epub;
-      const meta = epub.getMetadata();
-      const title = meta.title || file.name;
-      setBookTitle(title);
-      const list = buildChapterList(epub);
-      setChapters(list);
-      const resumedItem =
-        lastOpenedBook && isSameEpubFile(file, lastOpenedBook)
-          ? list.find(
-              (item) =>
-                chapterListItemKey(item) ===
-                lastOpenedBook.activeChapter?.listItemKey,
-            )
-          : undefined;
-      const itemToOpen = resumedItem ?? list[0];
-      const activeChapterResume = itemToOpen
-        ? chapterResumeFromItem(list, itemToOpen)
-        : null;
 
-      if (itemToOpen) {
-        const selector = itemToOpen.kind === 'toc' ? itemToOpen.selector : '';
-        setActiveListItem(itemToOpen);
-        await openChapter(epub, itemToOpen.id, selector);
+    try {
+      setError('');
+      setAutoOpenStatus('');
+      const filePath = await pickEpubPath(lastOpenedBook?.originalPath);
+      if (!filePath) {
+        return;
       }
-      setLastOpenedBook({
-        fileName: file.name,
-        fileSize: file.size,
-        fileLastModified: file.lastModified,
-        filePath: readFilePath(file),
-        title,
-        activeChapter: activeChapterResume,
-      });
+
+      const file = await importEpubFileFromPath(filePath);
+      await openEpubFile(file, lastOpenedBook);
+      void loadImportedBooks();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       setError(message);
-    } finally {
-      setIsBusy(false);
     }
-  };
+  }, [lastOpenedBook, loadImportedBooks, openEpubFile]);
+
+  const lastOpenedImportedPath = lastOpenedBook?.importedPath;
+  const openEpubFileRef = useRef(openEpubFile);
+
+  useEffect(() => {
+    openEpubFileRef.current = openEpubFile;
+  }, [openEpubFile]);
+
+  useEffect(() => {
+    const bookToReopen = lastOpenedBookRef.current;
+    const importedPath = lastOpenedImportedPath;
+    if (
+      !importedPath ||
+      !bookToReopen ||
+      !isTauri() ||
+      autoOpenAttemptedImportedPathRef.current === importedPath
+    ) {
+      return;
+    }
+
+    let isCancelled = false;
+    const pathToReopen = importedPath;
+    autoOpenAttemptedImportedPathRef.current = pathToReopen;
+    setAutoOpenStatus(`Opening ${bookToReopen.title} from app storage...`);
+
+    async function reopenLastBook() {
+      try {
+        const file = await readImportedEpubFile(pathToReopen);
+        if (isCancelled) {
+          return;
+        }
+
+        await openEpubFileRef.current(file, bookToReopen);
+        if (!isCancelled) {
+          setAutoOpenStatus('');
+        }
+      } catch (caught) {
+        if (isCancelled) {
+          return;
+        }
+
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        setAutoOpenStatus(`Could not reopen the imported EPUB: ${message}`);
+      }
+    }
+
+    void reopenLastBook();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [lastOpenedImportedPath]);
+
+  const handleOpenImportedBook = useCallback(
+    async (book: ImportedEpubBook) => {
+      if (isBusy) {
+        return;
+      }
+
+      setError('');
+      setImportedBooksError('');
+      setAutoOpenStatus('');
+
+      try {
+        const file = await readImportedEpubFile(book.path);
+        await openEpubFile(file, lastOpenedBookRef.current);
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        setImportedBooksError(message);
+      }
+    },
+    [isBusy, openEpubFile],
+  );
+
+  const handleDeleteImportedBook = useCallback(
+    async (book: ImportedEpubBook) => {
+      if (deletingBookPath) {
+        return;
+      }
+
+      setError('');
+      setImportedBooksError('');
+
+      if (pendingDeleteBookPath !== book.path) {
+        clearBookDeleteConfirmation();
+        setPendingDeleteBookPath(book.path);
+        deleteBookConfirmationTimeoutRef.current = window.setTimeout(() => {
+          setPendingDeleteBookPath((currentPath) =>
+            currentPath === book.path ? '' : currentPath,
+          );
+          deleteBookConfirmationTimeoutRef.current = null;
+        }, 2000);
+        return;
+      }
+
+      clearBookDeleteConfirmation();
+      setDeletingBookPath(book.path);
+
+      try {
+        await invoke('delete_imported_epub_book', {
+          importedPath: book.path,
+        });
+        setImportedBooks((books) =>
+          books.filter((savedBook) => savedBook.path !== book.path),
+        );
+
+        if (lastOpenedBookRef.current?.importedPath === book.path) {
+          clearLastOpenedBook();
+          disposeEpub();
+          setAutoOpenStatus('');
+        }
+      } catch (caught) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+        setImportedBooksError(message);
+      } finally {
+        setDeletingBookPath('');
+      }
+    },
+    [
+      clearBookDeleteConfirmation,
+      clearLastOpenedBook,
+      deletingBookPath,
+      disposeEpub,
+      pendingDeleteBookPath,
+    ],
+  );
 
   const onPickChapter = async (item: ChapterListItem) => {
     const epub = epubRef.current;
@@ -764,7 +1182,9 @@ function EpubReaderPage() {
                       variant="secondary"
                       className="w-full"
                       disabled={isBusy}
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() => {
+                        void handleChooseFile();
+                      }}
                     >
                       {isBusy ? (
                         <LoaderCircle className="size-4 animate-spin" />
@@ -774,6 +1194,12 @@ function EpubReaderPage() {
                       Choose file…
                     </Button>
                   </div>
+
+                  {autoOpenStatus && !bookTitle ? (
+                    <div className="rounded-md border px-3 py-2 text-muted-foreground text-sm">
+                      {autoOpenStatus}
+                    </div>
+                  ) : null}
 
                   {lastOpenedBook && !bookTitle ? (
                     <div className="rounded-md border px-3 py-2 text-sm">
@@ -788,7 +1214,7 @@ function EpubReaderPage() {
                           : ''}
                       </p>
                       <p className="text-muted-foreground text-xs leading-5">
-                        Choose the same file to resume this chapter.
+                        Opening this EPUB automatically from app storage.
                       </p>
                     </div>
                   ) : null}
@@ -804,6 +1230,123 @@ function EpubReaderPage() {
                       {error}
                     </div>
                   ) : null}
+
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-muted-foreground text-xs">
+                    <div className="h-px bg-border" />
+                    <span>or</span>
+                    <div className="h-px bg-border" />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-sm">Open copied book</p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => void loadImportedBooks()}
+                        disabled={isLoadingImportedBooks}
+                        aria-label="Refresh copied books"
+                        title="Refresh copied books"
+                      >
+                        <RefreshCw
+                          className={
+                            isLoadingImportedBooks
+                              ? 'size-4 animate-spin'
+                              : 'size-4'
+                          }
+                        />
+                      </Button>
+                    </div>
+
+                    {importedBooksError ? (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm">
+                        {importedBooksError}
+                      </div>
+                    ) : null}
+
+                    {importedBooks.length > 0 ? (
+                      <div className="max-h-64 overflow-y-auto pr-1">
+                        {importedBooks.map((book) => {
+                          const isActive =
+                            lastOpenedBook?.importedPath === book.path;
+                          const isDeleting = deletingBookPath === book.path;
+                          const isConfirmingDelete =
+                            pendingDeleteBookPath === book.path;
+
+                          return (
+                            <div
+                              key={book.path}
+                              className="grid grid-cols-[1fr_auto] items-center gap-3 border-b py-2 last:border-b-0"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-sm">
+                                  {book.id}
+                                </p>
+                                <p className="truncate text-muted-foreground text-xs">
+                                  {book.name} ·{' '}
+                                  {formatModifiedTime(book.modifiedSec)} ·{' '}
+                                  {formatFileSize(book.sizeBytes)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant={isActive ? 'secondary' : 'ghost'}
+                                  size="icon-sm"
+                                  onClick={() =>
+                                    void handleOpenImportedBook(book)
+                                  }
+                                  disabled={isBusy || isDeleting}
+                                  aria-label={`Open ${book.id}`}
+                                  title={`Open ${book.id}`}
+                                >
+                                  {isBusy && isActive ? (
+                                    <LoaderCircle className="size-4 animate-spin" />
+                                  ) : (
+                                    <BookOpen className="size-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant={
+                                    isConfirmingDelete ? 'destructive' : 'ghost'
+                                  }
+                                  size="icon-sm"
+                                  onClick={() =>
+                                    void handleDeleteImportedBook(book)
+                                  }
+                                  disabled={Boolean(deletingBookPath)}
+                                  aria-label={
+                                    isConfirmingDelete
+                                      ? `Confirm delete ${book.id}`
+                                      : `Delete ${book.id}`
+                                  }
+                                  title={
+                                    isConfirmingDelete ? 'Confirm?' : 'Delete'
+                                  }
+                                >
+                                  {isDeleting ? (
+                                    <LoaderCircle className="size-4 animate-spin" />
+                                  ) : isConfirmingDelete ? (
+                                    <Check className="size-4" />
+                                  ) : (
+                                    <Trash2 className="size-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="py-2 text-muted-foreground text-sm">
+                        {isLoadingImportedBooks
+                          ? 'Loading copied books...'
+                          : 'Imported EPUBs will appear here.'}
+                      </p>
+                    )}
+                  </div>
 
                   <div className="max-h-[min(42dvh,520px)] space-y-0 overflow-y-auto rounded-lg lg:max-h-[min(60dvh,520px)]">
                     {chapters.length === 0 ? (
