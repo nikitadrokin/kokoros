@@ -8,7 +8,7 @@ import {
   type NavPoint,
 } from '@lingo-reader/epub-parser';
 import { createFileRoute } from '@tanstack/react-router';
-import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
   AudioLinesIcon,
@@ -17,12 +17,12 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Download,
   FileAudio,
   FileText,
   LoaderCircle,
   Play,
   RefreshCw,
+  Save,
   Section,
   Trash2,
   Upload,
@@ -91,20 +91,6 @@ type TocListItem = {
 type ChapterListItem = SpineListItem | TocListItem;
 
 type NarrationScope = 'chapter' | 'section' | 'selection';
-
-type SynthesizeSpeechResponse = {
-  audioBase64: string | null;
-  sampleRate: number;
-  savedOutputPath: string | null;
-  savedTimestampsPath: string | null;
-  timestamps: TimestampRow[];
-};
-
-type TimestampRow = {
-  word: string;
-  startSec: number;
-  endSec: number;
-};
 
 type ReadEpubFileResponse = {
   id: string | null;
@@ -590,9 +576,6 @@ function EpubReaderPage() {
   const [narrationMode, setNarrationMode] = useState<
     'stream' | 'save-stream' | 'save-silent'
   >('save-stream');
-  const [isGeneratingFile, setIsGeneratingFile] = useState(false);
-  const [narrationStatus, setNarrationStatus] = useState('');
-  const [timestampCount, setTimestampCount] = useState(0);
   const [autoOpenStatus, setAutoOpenStatus] = useState('');
   const [importedBooks, setImportedBooks] = useState<ImportedEpubBook[]>([]);
   const [importedBooksError, setImportedBooksError] = useState('');
@@ -675,8 +658,6 @@ function EpubReaderPage() {
     setActiveListItem(null);
     setActiveChapter(null);
     setBookTitle('');
-    setNarrationStatus('');
-    setTimestampCount(0);
     setNarrationError('');
     setCollapsedKeys(new Set());
     clearPlayerSource();
@@ -1103,8 +1084,6 @@ function EpubReaderPage() {
       return;
     }
 
-    setNarrationStatus('');
-    setTimestampCount(0);
     const response = await generateStream({
       text,
       style: narrationStyle,
@@ -1114,68 +1093,11 @@ function EpubReaderPage() {
       ...buildNarrationOutputNames(),
     });
 
-    if (response?.savedOutputPath) {
-      setNarrationStatus(`Saved ${response.savedOutputPath}`);
-    }
-  };
-
-  const handleGenerateFile = async () => {
-    const text = buildNarrationText();
-    if (!text) {
-      setNarrationError(
-        narrationScope === 'selection'
-          ? 'Select text in the reading pane before generating a selection.'
-          : 'This EPUB section did not contain readable text.',
-      );
-      return;
-    }
-
-    setNarrationError('');
-    setNarrationStatus('');
-    setTimestampCount(0);
-    setIsGeneratingFile(true);
-
-    try {
-      const response = await invoke<SynthesizeSpeechResponse>(
-        'synthesize_speech',
-        {
-          request: {
-            text,
-            style: narrationStyle,
-            speed: narrationSpeed,
-            saveToDisk: true,
-            mono: true,
-            timestamps: true,
-            ...buildNarrationOutputNames(),
-          },
-        },
-      );
-
-      if (!response.savedOutputPath) {
-        throw new Error('The generated chapter audio was not saved.');
-      }
-
-      setPlayerSource(
-        convertFileSrc(response.savedOutputPath),
-        response.savedOutputPath,
-      );
-      setTimestampCount(response.timestamps.length);
-      setNarrationStatus(
-        response.savedTimestampsPath
-          ? `Saved ${response.savedOutputPath} with word timings`
-          : `Saved ${response.savedOutputPath}`,
-      );
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : String(caught);
-      setNarrationError(message);
-    } finally {
-      setIsGeneratingFile(false);
-    }
   };
 
   const sectionScopeUnavailable =
     activeListItem?.kind !== 'toc' || !activeListItem.selector;
-  const isNarrationBusy = isReadingAloud || isGeneratingFile;
+  const isNarrationBusy = isReadingAloud;
 
   const activeIndex = chapterListItemIndex(chapters, activeListItem);
   const prevChapter = activeIndex > 0 ? (chapters[activeIndex - 1] ?? null) : null;
@@ -1648,45 +1570,27 @@ function EpubReaderPage() {
                     </div>
                   ) : null}
 
-                  {narrationStatus ? (
-                    <p className="break-words text-muted-foreground text-xs leading-5">
-                      {narrationStatus}
-                      {timestampCount > 0
-                        ? ` · ${timestampCount} words timed`
-                        : ''}
-                    </p>
-                  ) : null}
-
-                  <div className="grid gap-2">
-                    <Button
-                      type="button"
-                      className="w-full"
-                      onClick={() => void handleReadAloud()}
-                      disabled={!activeChapter || isNarrationBusy}
-                    >
-                      {isReadingAloud ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                      ) : (
-                        <Play className="size-4" />
-                      )}
-                      {isReadingAloud ? 'Reading…' : 'Read aloud'}
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="w-full"
-                      onClick={() => void handleGenerateFile()}
-                      disabled={!activeChapter || isNarrationBusy}
-                    >
-                      {isGeneratingFile ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                      ) : (
-                        <Download className="size-4" />
-                      )}
-                      {isGeneratingFile ? 'Generating…' : 'Generate file'}
-                    </Button>
-                  </div>
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => void handleReadAloud()}
+                    disabled={!activeChapter || isNarrationBusy}
+                  >
+                    {isNarrationBusy ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : narrationMode === 'save-silent' ? (
+                      <Save className="size-4" />
+                    ) : (
+                      <AudioLinesIcon className="size-4" />
+                    )}
+                    {isNarrationBusy
+                      ? narrationMode === 'save-silent'
+                        ? 'Saving…'
+                        : 'Reading…'
+                      : narrationMode === 'save-silent'
+                        ? 'Save audio'
+                        : 'Read aloud'}
+                  </Button>
 
                   <div className="grid gap-2">
                     {/* biome-ignore lint/a11y/useMediaCaption: Generated narration does not have captions yet. */}
@@ -1708,11 +1612,6 @@ function EpubReaderPage() {
                       <FileAudio className="size-4" />
                       Play again
                     </Button>
-                    {savedOutputPath ? (
-                      <p className="wrap-break-word text-muted-foreground text-xs leading-5">
-                        {savedOutputPath}
-                      </p>
-                    ) : null}
                   </div>
                 </CardContent>
               </Card>
