@@ -989,7 +989,6 @@ function EpubReaderPage() {
       return;
     }
     setError('');
-    setNarrationStatus('');
     setNarrationError('');
     const selector = item.kind === 'toc' ? item.selector : '';
     if (activeChapter?.id === item.id) {
