@@ -38,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
@@ -60,6 +61,10 @@ import {
   extractSpeechTextFromChapterHtml,
   extractSpeechTextFromDocument,
 } from '@/lib/epub-speech';
+import {
+  estimateAudioDurationSec,
+  formatDuration,
+} from '@/lib/speech-audio';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
 import {
   type EpubChapterResume,
@@ -590,10 +595,12 @@ function EpubReaderPage() {
     clearPlayerSource,
     error: narrationError,
     generateStream,
+    generatedDurationSec,
     isGenerating: isReadingAloud,
     play: playNarration,
     setError: setNarrationError,
   } = useSpeechStreamGeneration({ audioRef });
+  const [estimatedDurationSec, setEstimatedDurationSec] = useState(0);
   const readerSrcDoc = useMemo(
     () =>
       activeChapter
@@ -1088,6 +1095,7 @@ function EpubReaderPage() {
       return;
     }
 
+    setEstimatedDurationSec(estimateAudioDurationSec(text, narrationSpeed));
     await generateStream({
       text,
       style: narrationStyle,
@@ -1623,6 +1631,30 @@ function EpubReaderPage() {
                         ? 'Save audio'
                         : 'Read aloud'}
                   </Button>
+
+                  {isNarrationBusy && estimatedDurationSec > 0 ? (
+                    <div className='grid gap-1'>
+                      <Progress
+                        value={Math.round(
+                          Math.min(
+                            generatedDurationSec / estimatedDurationSec,
+                            0.95,
+                          ) * 100,
+                        )}
+                      />
+                      <p className='text-muted-foreground text-xs tabular-nums'>
+                        {formatDuration(generatedDurationSec)} generated ·{' '}
+                        ~
+                        {formatDuration(
+                          Math.max(
+                            estimatedDurationSec - generatedDurationSec,
+                            0,
+                          ),
+                        )}{' '}
+                        remaining
+                      </p>
+                    </div>
+                  ) : null}
 
                   <div className='grid gap-2'>
                     {/* biome-ignore lint/a11y/useMediaCaption: Generated narration does not have captions yet. */}

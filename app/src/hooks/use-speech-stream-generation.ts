@@ -11,6 +11,15 @@ import {
   SPEECH_STREAM_CHUNK_EVENT,
 } from '@/lib/speech-audio';
 
+/** Computes the playback duration (in seconds) of a raw float32 audio chunk. */
+function chunkDurationSec(
+  byteLength: number,
+  sampleRate: number,
+  channels: number,
+): number {
+  return byteLength / (FLOAT_SAMPLE_BYTES * channels * sampleRate);
+}
+
 const WEB_AUDIO_START_DELAY_SEC = 0.08;
 const WEB_AUDIO_MIN_LEAD_SEC = 0.02;
 
@@ -55,6 +64,7 @@ export function useSpeechStreamGeneration({
   const [savedOutputPath, setSavedOutputPath] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [generatedDurationSec, setGeneratedDurationSec] = useState(0);
 
   const stopScheduledAudio = useCallback(() => {
     for (const source of scheduledSourcesRef.current) {
@@ -179,6 +189,7 @@ export function useSpeechStreamGeneration({
 
       setError('');
       setIsGenerating(true);
+      setGeneratedDurationSec(0);
       activeStreamIdRef.current = streamId;
       audioRef.current?.pause();
       stopScheduledAudio();
@@ -216,6 +227,14 @@ export function useSpeechStreamGeneration({
               }
 
               const bytes = base64ToBytes(event.payload.audioBase64);
+              setGeneratedDurationSec((prev) =>
+                prev +
+                chunkDurationSec(
+                  bytes.byteLength,
+                  event.payload.sampleRate,
+                  event.payload.channels,
+                ),
+              );
               if (!request.saveToDisk) {
                 streamedAudioChunks.push(bytes);
               }
@@ -299,6 +318,7 @@ export function useSpeechStreamGeneration({
     clearPlayerSource,
     error,
     generateStream,
+    generatedDurationSec,
     isGenerating,
     play,
     savedOutputPath,

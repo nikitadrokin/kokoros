@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
@@ -26,6 +27,10 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation';
+import {
+  estimateAudioDurationSec,
+  formatDuration,
+} from '@/lib/speech-audio';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
 import { usePlaygroundStore } from '@/stores/playground-store';
 import { isPlaybackMode, useSettingsStore } from '@/stores/settings-store';
@@ -82,12 +87,14 @@ function PlaygroundPage() {
     clearPlayerSource,
     error,
     generateStream,
+    generatedDurationSec,
     isGenerating,
     play: handlePlay,
     savedOutputPath,
     setError,
     setPlayerSource,
   } = useSpeechStreamGeneration({ audioRef });
+  const [estimatedDurationSec, setEstimatedDurationSec] = useState(0);
 
   useEffect(() => {
     return () => {
@@ -128,6 +135,7 @@ function PlaygroundPage() {
   }, [loadSavedAudio]);
 
   const handleGenerate = async () => {
+    setEstimatedDurationSec(estimateAudioDurationSec(text));
     const response = await generateStream({
       text,
       style,
@@ -372,6 +380,27 @@ function PlaygroundPage() {
                 )}
                 {isGenerating ? 'Generating…' : 'Generate audio'}
               </Button>
+
+              {isGenerating && estimatedDurationSec > 0 ? (
+                <div className="grid gap-1">
+                  <Progress
+                    value={Math.round(
+                      Math.min(
+                        generatedDurationSec / estimatedDurationSec,
+                        0.95,
+                      ) * 100,
+                    )}
+                  />
+                  <p className="text-muted-foreground text-xs tabular-nums">
+                    {formatDuration(generatedDurationSec)} generated ·{' '}
+                    ~
+                    {formatDuration(
+                      Math.max(estimatedDurationSec - generatedDurationSec, 0),
+                    )}{' '}
+                    remaining
+                  </p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 

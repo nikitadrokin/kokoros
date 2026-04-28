@@ -50,6 +50,22 @@ export const createFloatWavBlobUrl = (
   return URL.createObjectURL(new Blob([wavBytes], { type: 'audio/wav' }));
 };
 
+/**
+ * Estimates the total audio duration in seconds for a given text and TTS speed.
+ * Uses ~2.5 words/second at 1x as the baseline (≈150 wpm), scaled by `speed`.
+ */
+export function estimateAudioDurationSec(text: string, speed = 1): number {
+  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  const wordsPerSecond = 2.5 * Math.max(speed, 0.1);
+  return Math.max(wordCount / wordsPerSecond, 0.1);
+}
+
+/** Formats a duration in seconds as `m:ss`. */
+export function formatDuration(sec: number): string {
+  const s = Math.max(Math.floor(sec), 0);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
 export const createStreamId = () =>
   globalThis.crypto?.randomUUID?.() ??
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
