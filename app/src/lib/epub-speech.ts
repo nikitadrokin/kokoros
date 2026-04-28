@@ -30,15 +30,33 @@ const SKIP_SELECTOR = [
   '[hidden]',
   '[aria-hidden="true"]',
   '[role="doc-pagebreak"]',
+  '[role="navigation"]',
+  '[role="doc-toc"]',
   '.pagebreak',
   '.page-number',
   '.pagenum',
 ].join(',');
 
+/** epub:type values that indicate navigational / non-prose content. */
+const SKIP_EPUB_TYPES =
+  /\b(pagebreak|noteref|footnote|endnote|rearnote|toc|landmarks|lot|loi|loa|lov|index|bibliography|glossary)\b/i;
+
 export type EpubSpeechScope = {
   startSelector?: string;
   endSelector?: string;
 };
+
+/**
+ * Extract speech text from a live Document (e.g. an iframe's contentDocument).
+ * Preferred over the HTML-string variant because it reflects exactly what is
+ * rendered — including any CSS-hidden elements that the parser would miss.
+ */
+export function extractSpeechTextFromDocument(
+  doc: Document,
+  scope: EpubSpeechScope = {},
+): string {
+  return extractSpeechTextFromRoot(doc.body ?? doc.documentElement, doc, scope);
+}
 
 export function extractSpeechTextFromChapterHtml(
   html: string,
@@ -48,7 +66,14 @@ export function extractSpeechTextFromChapterHtml(
     `<!doctype html><html><body>${html}</body></html>`,
     'text/html',
   );
-  const body = doc.body;
+  return extractSpeechTextFromRoot(doc.body, doc, scope);
+}
+
+function extractSpeechTextFromRoot(
+  body: Element,
+  doc: Document,
+  scope: EpubSpeechScope,
+): string {
   const startNode = scope.startSelector
     ? body.querySelector(scope.startSelector)
     : null;
@@ -111,5 +136,19 @@ function shouldSkipElement(element: Element): boolean {
   }
 
   const epubType = element.getAttribute('epub:type') ?? '';
-  return /\b(pagebreak|noteref|footnote|endnote|rearnote)\b/i.test(epubType);
+  if (SKIP_EPUB_TYPES.test(epubType)) {
+    return true;
+  }
+
+  // Also check ancestors for epub:type navigation markers
+  let ancestor = element.parentElement;
+  while (ancestor) {
+    const ancestorType = ancestor.getAttribute('epub:type') ?? '';
+    if (SKIP_EPUB_TYPES.test(ancestorType)) {
+      return true;
+    }
+    ancestor = ancestor.parentElement;
+  }
+
+  return false;
 }

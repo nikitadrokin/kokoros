@@ -58,6 +58,7 @@ import { useSpeechStreamGeneration } from '@/hooks/use-speech-stream-generation'
 import {
   extractSelectedSpeechText,
   extractSpeechTextFromChapterHtml,
+  extractSpeechTextFromDocument,
 } from '@/lib/epub-speech';
 import { VOICE_OPTIONS } from '@/lib/voice-options';
 import {
@@ -1041,8 +1042,10 @@ function EpubReaderPage() {
       return '';
     }
 
+    const iframeDoc = iframeRef.current?.contentDocument ?? null;
+
     if (narrationScope === 'selection') {
-      return extractSelectedSpeechText(iframeRef.current?.contentDocument);
+      return extractSelectedSpeechText(iframeDoc);
     }
 
     if (
@@ -1050,13 +1053,18 @@ function EpubReaderPage() {
       activeListItem?.kind === 'toc' &&
       activeListItem.selector
     ) {
-      return extractSpeechTextFromChapterHtml(activeChapter.chapter.html, {
+      const scope = {
         startSelector: activeListItem.selector,
         endSelector: findNextSectionSelector(chapters, activeListItem),
-      });
+      };
+      return iframeDoc
+        ? extractSpeechTextFromDocument(iframeDoc, scope)
+        : extractSpeechTextFromChapterHtml(activeChapter.chapter.html, scope);
     }
 
-    return extractSpeechTextFromChapterHtml(activeChapter.chapter.html);
+    return iframeDoc
+      ? extractSpeechTextFromDocument(iframeDoc)
+      : extractSpeechTextFromChapterHtml(activeChapter.chapter.html);
   }, [activeChapter, activeListItem, chapters, narrationScope]);
 
   const buildNarrationOutputNames = useCallback(() => {
