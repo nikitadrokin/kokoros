@@ -1,5 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { AudioLinesIcon, BookOpenIcon, WandSparkles } from 'lucide-react';
+import { AudioLinesIcon, BookOpenIcon, HeadphonesIcon, WandSparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ThemeToggle from './ThemeToggle';
 import UpdateButton from './UpdateButton';
@@ -33,6 +33,12 @@ const navItems = [
     label: 'EPUB reader',
     description: 'Open books and browse chapters inline',
     icon: BookOpenIcon,
+  },
+  {
+    to: '/library',
+    label: 'Library',
+    description: 'Browse and play saved audio',
+    icon: HeadphonesIcon,
   },
 ] as const;
 

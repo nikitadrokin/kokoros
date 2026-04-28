@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LibraryRouteImport } from './routes/library'
 import { Route as EpubRouteImport } from './routes/epub'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpeechOptimizeRouteImport } from './routes/speech/optimize'
 
+const LibraryRoute = LibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EpubRoute = EpubRouteImport.update({
   id: '/epub',
   path: '/epub',
@@ -32,35 +38,46 @@ const SpeechOptimizeRoute = SpeechOptimizeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
+  '/library': typeof LibraryRoute
   '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
+  '/library': typeof LibraryRoute
   '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
+  '/library': typeof LibraryRoute
   '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/epub' | '/speech/optimize'
+  fullPaths: '/' | '/epub' | '/library' | '/speech/optimize'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/epub' | '/speech/optimize'
-  id: '__root__' | '/' | '/epub' | '/speech/optimize'
+  to: '/' | '/epub' | '/library' | '/speech/optimize'
+  id: '__root__' | '/' | '/epub' | '/library' | '/speech/optimize'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EpubRoute: typeof EpubRoute
+  LibraryRoute: typeof LibraryRoute
   SpeechOptimizeRoute: typeof SpeechOptimizeRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/library': {
+      id: '/library'
+      path: '/library'
+      fullPath: '/library'
+      preLoaderRoute: typeof LibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/epub': {
       id: '/epub'
       path: '/epub'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EpubRoute: EpubRoute,
+  LibraryRoute: LibraryRoute,
   SpeechOptimizeRoute: SpeechOptimizeRoute,
 }
 export const routeTree = rootRouteImport
