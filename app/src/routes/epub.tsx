@@ -20,7 +20,6 @@ import {
   FileAudio,
   FileText,
   LoaderCircle,
-  Play,
   RefreshCw,
   Save,
   Section,
@@ -593,9 +592,7 @@ function EpubReaderPage() {
     generateStream,
     isGenerating: isReadingAloud,
     play: playNarration,
-    savedOutputPath,
     setError: setNarrationError,
-    setPlayerSource,
   } = useSpeechStreamGeneration({ audioRef });
   const readerSrcDoc = useMemo(
     () =>
@@ -1091,7 +1088,7 @@ function EpubReaderPage() {
       return;
     }
 
-    const response = await generateStream({
+    await generateStream({
       text,
       style: narrationStyle,
       speed: narrationSpeed,
@@ -1433,7 +1430,15 @@ function EpubReaderPage() {
                           className='w-full'
                           aria-label='Narration scope'
                         >
-                          <SelectValue placeholder='Current chapter' />
+                          <SelectValue>
+                            {(value: string | null) =>
+                              value === 'section'
+                                ? 'Current section'
+                                : value === 'selection'
+                                  ? 'Selected text'
+                                  : 'Current chapter'
+                            }
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value='chapter' label='Current chapter'>
@@ -1466,7 +1471,12 @@ function EpubReaderPage() {
                           className='w-full'
                           aria-label='Narration voice'
                         >
-                          <SelectValue placeholder='af_heart' />
+                          <SelectValue>
+                            {(value: string | null) =>
+                              VOICE_OPTIONS.find((v) => v.value === value)
+                                ?.label ?? value
+                            }
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {VOICE_OPTIONS.map((voice) => (

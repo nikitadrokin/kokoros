@@ -259,7 +259,12 @@ function PlaygroundPage() {
                     className="w-full"
                     aria-label="Voice style"
                   >
-                    <SelectValue placeholder="af_heart" />
+                    <SelectValue>
+                      {(value: string | null) =>
+                        VOICE_OPTIONS.find((v) => v.value === value)?.label ??
+                        value
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {VOICE_OPTIONS.map((voice) => (
