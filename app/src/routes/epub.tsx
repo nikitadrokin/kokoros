@@ -1429,16 +1429,17 @@ function EpubReaderPage() {
                           <SelectValue placeholder="Current chapter" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="chapter">
+                          <SelectItem value="chapter" label="Current chapter">
                             Current chapter
                           </SelectItem>
                           <SelectItem
                             value="section"
+                            label="Current section"
                             disabled={sectionScopeUnavailable}
                           >
                             Current section
                           </SelectItem>
-                          <SelectItem value="selection">
+                          <SelectItem value="selection" label="Selected text">
                             Selected text
                           </SelectItem>
                         </SelectContent>
@@ -1462,7 +1463,7 @@ function EpubReaderPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {VOICE_OPTIONS.map((voice) => (
-                            <SelectItem key={voice.value} value={voice.value}>
+                            <SelectItem key={voice.value} value={voice.value} label={voice.label}>
                               {voice.label}
                             </SelectItem>
                           ))}
