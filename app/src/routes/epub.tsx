@@ -1634,16 +1634,16 @@ function EpubReaderPage() {
             </TabsContent>
           </Tabs>
 
-          <Card className="min-w-0 border-border/70 shadow-sm backdrop-blur">
+          <Card className="flex min-w-0 flex-col border-border/70 shadow-sm backdrop-blur">
             <CardHeader>
               <CardTitle className="text-base">Reading pane</CardTitle>
             </CardHeader>
-            <CardContent className="min-w-0 grow">
-              <div className="h-full overflow-hidden rounded-lg bg-background">
+            <CardContent className="flex min-w-0 grow flex-col">
+              <div className="grow overflow-hidden rounded-lg bg-background">
                 <iframe
                   ref={iframeRef}
                   title="EPUB chapter"
-                  className="h-full w-full flex-1 grow border-0 bg-background"
+                  className="h-full min-h-[65vh] w-full border-0 bg-background"
                   sandbox="allow-same-origin"
                   srcDoc={readerSrcDoc}
                   style={{ colorScheme: readerTheme.colorScheme }}
