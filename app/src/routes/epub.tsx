@@ -35,6 +35,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -1464,7 +1465,14 @@ function EpubReaderPage() {
                         <SelectContent>
                           {VOICE_OPTIONS.map((voice) => (
                             <SelectItem key={voice.value} value={voice.value} label={voice.label}>
-                              {voice.label}
+                              <span className="flex flex-1 items-center justify-between gap-2">
+                                {voice.label}
+                                {voice.badge !== undefined && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {voice.badge}
+                                  </Badge>
+                                )}
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
