@@ -5,10 +5,22 @@ use ort::session::builder::SessionBuilder;
 
 pub trait OrtBase {
     fn load_model(&mut self, model_path: String) -> Result<(), String> {
-        #[cfg(feature = "cuda")]
+        #[cfg(feature = "coreml")]
+        let providers = [ep::CoreML::default()
+            .with_compute_units(ep::coreml::ComputeUnits::All)
+            .with_model_cache_dir(
+                std::env::var("HOME")
+                    .map(|h| format!("{}/Library/Caches/kokoros/coreml", h))
+                    .unwrap_or_else(|_| {
+                        std::env::temp_dir().to_string_lossy().into_owned()
+                    }),
+            )
+            .build()];
+
+        #[cfg(all(feature = "cuda", not(feature = "coreml")))]
         let providers = [ep::CUDA::default().build()];
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(any(feature = "cuda", feature = "coreml")))]
         let providers = [ep::CPU::default().build()];
 
         match SessionBuilder::new() {
@@ -38,10 +50,13 @@ pub trait OrtBase {
                 eprintln!("  - {}", output.name());
             }
 
-            #[cfg(feature = "cuda")]
+            #[cfg(feature = "coreml")]
+            eprintln!("Configured with: CoreML execution provider");
+
+            #[cfg(all(feature = "cuda", not(feature = "coreml")))]
             eprintln!("Configured with: CUDA execution provider");
 
-            #[cfg(not(feature = "cuda"))]
+            #[cfg(not(any(feature = "cuda", feature = "coreml")))]
             eprintln!("Configured with: CPU execution provider");
         } else {
             eprintln!("Session is not initialized.");

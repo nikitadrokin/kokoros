@@ -26,9 +26,12 @@ function getHostTargetTriple(): string {
 
 const host = getHostTargetTriple();
 
+const extraFeatures: string[] =
+  process.platform === 'darwin' ? ['--features', 'coreml'] : [];
+
 execFileSync(
   'cargo',
-  ['build', '--manifest-path', cliManifest, '--release', '--bin', 'koko'],
+  ['build', '--manifest-path', cliManifest, '--release', '--bin', 'koko', ...extraFeatures],
   { stdio: 'inherit' },
 );
 
