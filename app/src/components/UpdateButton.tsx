@@ -21,6 +21,7 @@ export default function UpdateButton() {
   const [state, setState] = useState<UpdateButtonState>('unchecked');
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
 
+  const isDev = import.meta.env.DEV;
   const isLoading = state === 'preparing' || state === 'installing';
   const label = updateButtonLabel(state, availableVersion);
   const variant = state === 'ready' ? 'default' : 'outline';
@@ -107,7 +108,7 @@ export default function UpdateButton() {
             variant={variant}
             size='icon-sm'
             className='shrink-0 rounded-full transition-colors duration-200'
-            disabled={isLoading}
+            disabled={isLoading || isDev}
             onClick={handleUpdateClick}
             aria-label={label}
           />
