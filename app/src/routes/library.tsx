@@ -191,11 +191,21 @@ function LibraryPage() {
 
         <Card className="shadow-sm backdrop-blur">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Headphones className="size-4 text-muted-foreground" />
-              <span className="min-w-0 truncate">
-                {activeFile ? activeFile.name : 'No track selected'}
-              </span>
+            <CardTitle className="flex min-w-0 items-center gap-2 overflow-hidden text-base">
+              <Headphones className="size-4 shrink-0 text-muted-foreground" />
+              {activeFile ? (
+                <div className="relative min-w-0 flex-1 overflow-hidden mask-[linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+                  <span
+                    className="inline-flex whitespace-nowrap gap-16"
+                    style={{ animation: 'marquee-scroll 18s linear infinite' }}
+                  >
+                    <span>{activeFile.name}</span>
+                    <span>{activeFile.name}</span>
+                  </span>
+                </div>
+              ) : (
+                <span className="text-muted-foreground">No track selected</span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
