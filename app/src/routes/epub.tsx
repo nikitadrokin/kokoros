@@ -14,6 +14,9 @@ import {
   AudioLinesIcon,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileAudio,
   FileText,
@@ -596,6 +599,7 @@ function EpubReaderPage() {
   const [deletingBookPath, setDeletingBookPath] = useState('');
   const [pendingDeleteBookPath, setPendingDeleteBookPath] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
   const {
     audioUrl,
@@ -616,6 +620,49 @@ function EpubReaderPage() {
     [activeChapter, readerTheme],
   );
 
+  const itemsWithChildren = useMemo<Set<string>>(() => {
+    const set = new Set<string>();
+    for (let i = 0; i < chapters.length - 1; i++) {
+      const curr = chapters[i];
+      const next = chapters[i + 1];
+      if (curr.kind === 'toc' && next?.kind === 'toc' && next.depth > curr.depth) {
+        set.add(chapterListItemKey(curr));
+      }
+    }
+    return set;
+  }, [chapters]);
+
+  const visibleChapters = useMemo<ChapterListItem[]>(() => {
+    if (collapsedKeys.size === 0) return chapters;
+    const result: ChapterListItem[] = [];
+    const depthStack: number[] = [];
+    for (const item of chapters) {
+      const depth = item.kind === 'toc' ? item.depth : 0;
+      while (depthStack.length > 0 && (depthStack[depthStack.length - 1] ?? 0) >= depth) {
+        depthStack.pop();
+      }
+      if (depthStack.length === 0) {
+        result.push(item);
+      }
+      if (collapsedKeys.has(chapterListItemKey(item))) {
+        depthStack.push(depth);
+      }
+    }
+    return result;
+  }, [chapters, collapsedKeys]);
+
+  const toggleCollapsed = useCallback((key: string) => {
+    setCollapsedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
   const disposeEpub = useCallback(() => {
     const current = epubRef.current;
     if (current) {
@@ -630,6 +677,7 @@ function EpubReaderPage() {
     setNarrationStatus('');
     setTimestampCount(0);
     setNarrationError('');
+    setCollapsedKeys(new Set());
     clearPlayerSource();
   }, [clearPlayerSource, setNarrationError]);
 
@@ -1121,6 +1169,13 @@ function EpubReaderPage() {
     activeListItem?.kind !== 'toc' || !activeListItem.selector;
   const isNarrationBusy = isReadingAloud || isGeneratingFile;
 
+  const activeIndex = chapterListItemIndex(chapters, activeListItem);
+  const prevChapter = activeIndex > 0 ? (chapters[activeIndex - 1] ?? null) : null;
+  const nextChapter =
+    activeIndex >= 0 && activeIndex < chapters.length - 1
+      ? (chapters[activeIndex + 1] ?? null)
+      : null;
+
   return (
     <main className="min-h-[calc(100vh-4.5rem)] p-4 md:p-6">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -1356,36 +1411,58 @@ function EpubReaderPage() {
                       </p>
                     ) : (
                       <ul className="divide-y">
-                        {chapters.map((item) => {
+                        {visibleChapters.map((item) => {
+                          const key = chapterListItemKey(item);
                           const isInCurrentChapter =
                             activeChapter?.id === item.id;
+                          const hasChildren = itemsWithChildren.has(key);
+                          const isCollapsed = collapsedKeys.has(key);
                           const ItemIcon = isInCurrentChapter
                             ? Section
                             : FileText;
 
                           return (
-                            <li key={chapterListItemKey(item)}>
-                              <button
-                                type="button"
-                                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted/60"
-                                style={{
-                                  paddingLeft:
-                                    item.kind === 'toc'
-                                      ? `${12 + item.depth * 12}px`
-                                      : undefined,
-                                }}
-                                onClick={() => {
-                                  void onPickChapter(item);
-                                }}
-                              >
-                                <ItemIcon
-                                  className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                                  aria-hidden="true"
-                                />
-                                <span className="leading-snug">
-                                  {item.label}
-                                </span>
-                              </button>
+                            <li key={key}>
+                              <div className="flex w-full items-stretch">
+                                <button
+                                  type="button"
+                                  className="flex min-w-0 flex-1 items-start gap-2 py-2 pr-2 text-left text-sm hover:bg-muted/60"
+                                  style={{
+                                    paddingLeft:
+                                      item.kind === 'toc'
+                                        ? `${12 + item.depth * 12}px`
+                                        : '12px',
+                                  }}
+                                  onClick={() => void onPickChapter(item)}
+                                >
+                                  <ItemIcon
+                                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                  />
+                                  <span className="leading-snug">
+                                    {item.label}
+                                  </span>
+                                </button>
+                                {hasChildren ? (
+                                  <button
+                                    type="button"
+                                    className="flex shrink-0 items-center px-2 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                    onClick={() => toggleCollapsed(key)}
+                                    aria-label={
+                                      isCollapsed
+                                        ? `Expand ${item.label}`
+                                        : `Collapse ${item.label}`
+                                    }
+                                    title={isCollapsed ? 'Expand' : 'Collapse'}
+                                  >
+                                    {isCollapsed ? (
+                                      <ChevronRight className="size-3.5" />
+                                    ) : (
+                                      <ChevronDown className="size-3.5" />
+                                    )}
+                                  </button>
+                                ) : null}
+                              </div>
                             </li>
                           );
                         })}
@@ -1635,8 +1712,32 @@ function EpubReaderPage() {
           </Tabs>
 
           <Card className="flex min-w-0 flex-col border-border/70 shadow-sm backdrop-blur">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Reading pane</CardTitle>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => prevChapter && void onPickChapter(prevChapter)}
+                  disabled={!prevChapter || isBusy}
+                  aria-label="Previous chapter"
+                  title="Previous chapter"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => nextChapter && void onPickChapter(nextChapter)}
+                  disabled={!nextChapter || isBusy}
+                  aria-label="Next chapter"
+                  title="Next chapter"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="flex min-w-0 grow flex-col">
               <div className="grow overflow-hidden rounded-lg bg-background">
