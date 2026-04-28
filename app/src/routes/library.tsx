@@ -65,6 +65,9 @@ function groupFiles(files: SavedAudioFile[]): AudioGroup[] {
 function LibraryPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const deleteConfirmTimeoutRef = useRef<number | null>(null);
+  const marqueeContainerRef = useRef<HTMLDivElement | null>(null);
+  const marqueeTextRef = useRef<HTMLSpanElement | null>(null);
+  const [isMarqueeActive, setIsMarqueeActive] = useState(false);
 
   const [files, setFiles] = useState<SavedAudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,6 +84,19 @@ function LibraryPage() {
     () => files.find((f) => f.path === activeFilePath) ?? null,
     [files, activeFilePath],
   );
+
+  useEffect(() => {
+    const container = marqueeContainerRef.current;
+    const text = marqueeTextRef.current;
+    if (!container || !text) return;
+
+    const check = () => setIsMarqueeActive(text.scrollWidth > container.clientWidth);
+    const observer = new ResizeObserver(check);
+    observer.observe(container);
+    observer.observe(text);
+    check();
+    return () => observer.disconnect();
+  }, [activeFile]);
 
   useEffect(() => {
     return () => {
@@ -194,14 +210,29 @@ function LibraryPage() {
             <CardTitle className="flex min-w-0 items-center gap-2 overflow-hidden text-base">
               <Headphones className="size-4 shrink-0 text-muted-foreground" />
               {activeFile ? (
-                <div className="relative min-w-0 flex-1 overflow-hidden mask-[linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+                <div
+                  ref={marqueeContainerRef}
+                  className={`relative min-w-0 flex-1 overflow-hidden${isMarqueeActive ? ' mask-[linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]' : ''}`}
+                >
+                  {/* hidden span used only for measuring natural text width */}
                   <span
-                    className="inline-flex whitespace-nowrap gap-16"
-                    style={{ animation: 'marquee-scroll 18s linear infinite' }}
+                    ref={marqueeTextRef}
+                    className="pointer-events-none invisible absolute whitespace-nowrap"
+                    aria-hidden="true"
                   >
-                    <span>{activeFile.name}</span>
-                    <span>{activeFile.name}</span>
+                    {activeFile.name}
                   </span>
+                  {isMarqueeActive ? (
+                    <span
+                      className="inline-flex gap-16 whitespace-nowrap"
+                      style={{ animation: 'marquee-scroll 18s linear infinite' }}
+                    >
+                      <span>{activeFile.name}</span>
+                      <span>{activeFile.name}</span>
+                    </span>
+                  ) : (
+                    <span className="block truncate">{activeFile.name}</span>
+                  )}
                 </div>
               ) : (
                 <span className="text-muted-foreground">No track selected</span>
