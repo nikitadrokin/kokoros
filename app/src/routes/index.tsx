@@ -252,6 +252,11 @@ function PlaygroundPage() {
                   className="min-h-72 resize-y"
                   value={text}
                   onChange={(event) => setText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && event.metaKey && !isGenerating) {
+                      void handleGenerate();
+                    }
+                  }}
                   placeholder="Enter text for Kokoro to synthesize."
                 />
               </div>
