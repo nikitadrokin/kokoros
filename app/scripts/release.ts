@@ -202,7 +202,7 @@ async function writeLatestUpdaterJson(
     platforms: {
       [platformKey]: {
         signature,
-        url: `https://github.com/nikitadrokin/kokoros/releases/download/v${version}/${updaterAssetName}`,
+        url: `https://github.com/nikitadrokin/kokoro/releases/download/v${version}/${updaterAssetName}`,
       },
     },
   };
