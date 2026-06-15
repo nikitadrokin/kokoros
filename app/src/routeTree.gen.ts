@@ -13,6 +13,9 @@ import { Route as LibraryRouteImport } from './routes/library'
 import { Route as EpubRouteImport } from './routes/epub'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SpeechOptimizeRouteImport } from './routes/speech/optimize'
+import { Route as MockupsStudioRouteImport } from './routes/mockups/studio'
+import { Route as MockupsConsoleRouteImport } from './routes/mockups/console'
+import { Route as MockupsAuroraRouteImport } from './routes/mockups/aurora'
 
 const LibraryRoute = LibraryRouteImport.update({
   id: '/library',
@@ -34,17 +37,38 @@ const SpeechOptimizeRoute = SpeechOptimizeRouteImport.update({
   path: '/speech/optimize',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MockupsStudioRoute = MockupsStudioRouteImport.update({
+  id: '/mockups/studio',
+  path: '/mockups/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MockupsConsoleRoute = MockupsConsoleRouteImport.update({
+  id: '/mockups/console',
+  path: '/mockups/console',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MockupsAuroraRoute = MockupsAuroraRouteImport.update({
+  id: '/mockups/aurora',
+  path: '/mockups/aurora',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
   '/library': typeof LibraryRoute
+  '/mockups/aurora': typeof MockupsAuroraRoute
+  '/mockups/console': typeof MockupsConsoleRoute
+  '/mockups/studio': typeof MockupsStudioRoute
   '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
   '/library': typeof LibraryRoute
+  '/mockups/aurora': typeof MockupsAuroraRoute
+  '/mockups/console': typeof MockupsConsoleRoute
+  '/mockups/studio': typeof MockupsStudioRoute
   '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRoutesById {
@@ -52,20 +76,48 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/epub': typeof EpubRoute
   '/library': typeof LibraryRoute
+  '/mockups/aurora': typeof MockupsAuroraRoute
+  '/mockups/console': typeof MockupsConsoleRoute
+  '/mockups/studio': typeof MockupsStudioRoute
   '/speech/optimize': typeof SpeechOptimizeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/epub' | '/library' | '/speech/optimize'
+  fullPaths:
+    | '/'
+    | '/epub'
+    | '/library'
+    | '/mockups/aurora'
+    | '/mockups/console'
+    | '/mockups/studio'
+    | '/speech/optimize'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/epub' | '/library' | '/speech/optimize'
-  id: '__root__' | '/' | '/epub' | '/library' | '/speech/optimize'
+  to:
+    | '/'
+    | '/epub'
+    | '/library'
+    | '/mockups/aurora'
+    | '/mockups/console'
+    | '/mockups/studio'
+    | '/speech/optimize'
+  id:
+    | '__root__'
+    | '/'
+    | '/epub'
+    | '/library'
+    | '/mockups/aurora'
+    | '/mockups/console'
+    | '/mockups/studio'
+    | '/speech/optimize'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EpubRoute: typeof EpubRoute
   LibraryRoute: typeof LibraryRoute
+  MockupsAuroraRoute: typeof MockupsAuroraRoute
+  MockupsConsoleRoute: typeof MockupsConsoleRoute
+  MockupsStudioRoute: typeof MockupsStudioRoute
   SpeechOptimizeRoute: typeof SpeechOptimizeRoute
 }
 
@@ -99,6 +151,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SpeechOptimizeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mockups/studio': {
+      id: '/mockups/studio'
+      path: '/mockups/studio'
+      fullPath: '/mockups/studio'
+      preLoaderRoute: typeof MockupsStudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mockups/console': {
+      id: '/mockups/console'
+      path: '/mockups/console'
+      fullPath: '/mockups/console'
+      preLoaderRoute: typeof MockupsConsoleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mockups/aurora': {
+      id: '/mockups/aurora'
+      path: '/mockups/aurora'
+      fullPath: '/mockups/aurora'
+      preLoaderRoute: typeof MockupsAuroraRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,6 +179,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EpubRoute: EpubRoute,
   LibraryRoute: LibraryRoute,
+  MockupsAuroraRoute: MockupsAuroraRoute,
+  MockupsConsoleRoute: MockupsConsoleRoute,
+  MockupsStudioRoute: MockupsStudioRoute,
   SpeechOptimizeRoute: SpeechOptimizeRoute,
 }
 export const routeTree = rootRouteImport
